@@ -86,3 +86,28 @@ def parse_telemetry(line):
 
     # Unknown message type.
     return None
+
+    # ------------------------------------------------------------------------
+    # System status
+    # ------------------------------------------------------------------------
+    #
+    # Format:
+    # STATUS,time_ms,heater_enabled,target_K,pwm,temp_K
+    #
+
+    if parts[0] == "STATUS":
+        if len(parts) != 6:
+            return None
+
+        try:
+            return {
+                "type": "STATUS",
+                "time_ms": int(parts[1]),
+                "heater_enabled": bool(int(parts[2])),
+                "target_k": float(parts[3]),
+                "pwm": float(parts[4]),
+                "temperature_k": float(parts[5]),
+            }
+
+        except ValueError:
+            return None
