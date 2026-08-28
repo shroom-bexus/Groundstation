@@ -8,6 +8,7 @@
 
 Stratospheric High-Altitude Radiation Observation of Organismic Mycology
 
+ethernet_link.py
 Ethernet communication with the SHROOM flight computer.
 
 Handles:
@@ -20,7 +21,7 @@ Handles:
 import socket
 import time
 
-
+from telemetry import parse_telemetry
 # ============================================================================
 # Ethernet configuration
 # ============================================================================
@@ -156,15 +157,46 @@ def _handle_connection(client):
             if not line:
                 continue
 
+            # ----------------------------------------------------------------
+            # Heartbeat response
+            # ----------------------------------------------------------------
 
-            print(f"Received: {line}")
-
-
-            # Heartbeat response from the Teensy.
             if line == "ACK":
                 waiting_for_ack = False
 
                 next_heartbeat = (
-                    time.monotonic() +
-                    HEARTBEAT_INTERVAL
+                        time.monotonic() +
+                        HEARTBEAT_INTERVAL
+                )
+
+                continue
+
+            # ----------------------------------------------------------------
+            # Telemetry
+            # ----------------------------------------------------------------
+
+            telemetry = parse_telemetry(line)
+
+            if telemetry is None:
+                print(f"Unknown message: {line}")
+                continue
+
+
+            # ----------------------------------------------------------------
+            # Parsed message handling
+            # ----------------------------------------------------------------
+
+            if telemetry["type"] == "LOG":
+                print(
+                    f"[TEENSY] "
+                    f"[{telemetry['level']}] "
+                    f"{telemetry['message']}"
+                )
+
+            elif telemetry["type"] == "PADS":
+                print(
+                    "PADS: "
+                    f"{telemetry['temperature_k']:.3f} K, "
+                    f"{telemetry['pressure_pa']:.2f} Pa, "
+                    f"t={telemetry['time_ms']} ms"
                 )
