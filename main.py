@@ -13,18 +13,16 @@ SHROOM Ground Station
 Main entry point of the ground station software.
 """
 
-from ethernet_link import ethernet_link_run
+from ui import GroundStationApp
 
 
 def main():
-    print("SHROOM Ground Station")
-    print()
+    """
+    Start the SHROOM Ground Station user interface.
+    """
 
-    try:
-        ethernet_link_run()
-
-    except KeyboardInterrupt:
-        print("\nGround station stopped.")
+    app = GroundStationApp()
+    app.run()
 
 
 if __name__ == "__main__":

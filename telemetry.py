@@ -84,15 +84,12 @@ def parse_telemetry(line):
             return None
 
 
-    # Unknown message type.
-    return None
-
     # ------------------------------------------------------------------------
     # System status
     # ------------------------------------------------------------------------
     #
     # Format:
-    # STATUS,time_ms,heater_enabled,target_K,pwm,temp_K
+    # STATUS,time_ms,controller_active,target_K,output_percent,temp_K
     #
 
     if parts[0] == "STATUS":
@@ -103,11 +100,42 @@ def parse_telemetry(line):
             return {
                 "type": "STATUS",
                 "time_ms": int(parts[1]),
-                "heater_enabled": bool(int(parts[2])),
+                "controller_active": bool(int(parts[2])),
                 "target_k": float(parts[3]),
-                "pwm": float(parts[4]),
+                "output_percent": float(parts[4]),
                 "temperature_k": float(parts[5]),
             }
 
         except ValueError:
             return None
+
+
+    # ------------------------------------------------------------------------
+    # Thermal control
+    # ------------------------------------------------------------------------
+    #
+    # Format:
+    # THERMAL,time_ms,temperature_K,output_percent
+    #
+
+    if parts[0] == "THERMAL":
+        if len(parts) != 4:
+            return None
+
+        try:
+            return {
+                "type": "THERMAL",
+                "time_ms": int(parts[1]),
+                "temperature_k": float(parts[2]),
+                "output_percent": float(parts[3]),
+            }
+
+        except ValueError:
+            return None
+
+
+    # ------------------------------------------------------------------------
+    # Unknown message type
+    # ------------------------------------------------------------------------
+
+    return None

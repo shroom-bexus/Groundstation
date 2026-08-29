@@ -8,256 +8,433 @@
 
 Stratospheric High-Altitude Radiation Observation of Organismic Mycology
 
-ethernet_link.py
-Ethernet communication with the SHROOM flight computer.
-
-Handles:
-- TCP connection to the Teensy
-- Automatic reconnect after connection loss
-- Heartbeat for connection monitoring
-- Line-based message reception
-- Ground station command transmission
+ui.py
+Terminal user interface for the SHROOM Ground Station.
 """
 
-import socket
-import time
+import queue
+import threading
 
-from telemetry import parse_telemetry
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal, Vertical
+from textual.widgets import Footer, Header, Input, RichLog, Static
 
-
-# ============================================================================
-# Ethernet configuration
-# ============================================================================
-
-TEENSY_IP = "172.16.18.131"
-TEENSY_PORT = 5000
-
-HEARTBEAT_INTERVAL = 2.0
-ACK_TIMEOUT = 3.0
-
-RECONNECT_INTERVAL = 1.0
+from ethernet_link import ethernet_link_run
 
 
-# ============================================================================
-# Connection handling
-# ============================================================================
-
-def ethernet_link_run(
-    command_queue,
-    on_connection,
-    on_telemetry,
-    on_log
-):
+class GroundStationApp(App):
     """
-    Keep the Ethernet connection to the Teensy running.
-
-    If the connection is lost, reconnect automatically.
+    SHROOM Ground Station terminal user interface.
     """
 
-    while True:
-        try:
-            on_log(
-                f"Connecting to {TEENSY_IP}:{TEENSY_PORT}..."
-            )
-
-            with socket.create_connection(
-                (TEENSY_IP, TEENSY_PORT),
-                timeout=3.0
-            ) as client:
-
-                on_connection(True)
-                on_log("Connected.")
-
-                try:
-                    _handle_connection(
-                        client,
-                        command_queue,
-                        on_telemetry,
-                        on_log
-                    )
-
-                finally:
-                    on_connection(False)
-
-        except (ConnectionError, OSError) as error:
-            on_connection(False)
-
-            on_log(
-                f"Connection lost: {error}"
-            )
-
-            time.sleep(RECONNECT_INTERVAL)
+    TITLE = "SHROOM Ground Station"
+    SUB_TITLE = "BEXUS"
 
 
-# ============================================================================
-# Connected state
-# ============================================================================
+    CSS = """
+    Screen {
+        layout: vertical;
+    }
 
-def _handle_connection(
-    client,
-    command_queue,
-    on_telemetry,
-    on_log
-):
-    """
-    Handle communication while a TCP connection is active.
+    #connection {
+        height: 3;
+        padding: 1 2;
+        border: solid white;
+    }
+
+    #data_area {
+        height: 1fr;
+    }
+
+    .panel {
+        width: 1fr;
+        padding: 1 2;
+        border: solid white;
+    }
+
+    .panel_title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #log {
+        height: 12;
+        border: solid white;
+        padding: 0 1;
+    }
+
+    #command {
+        height: 3;
+    }
     """
 
-    client.settimeout(0.5)
 
-    receive_buffer = ""
+    def __init__(self):
+        super().__init__()
 
-    next_heartbeat = 0.0
-
-    waiting_for_ack = False
-    ack_start_time = 0.0
-
-    status_requested = False
+        self.command_queue = queue.Queue()
+        self.connected = False
 
 
-    while True:
-        current_time = time.monotonic()
+    # ========================================================================
+    # UI layout
+    # ========================================================================
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+
+        yield Static(
+            "Connection: OFFLINE",
+            id="connection"
+        )
+
+        with Horizontal(id="data_area"):
+
+            # ----------------------------------------------------------------
+            # Thermal system
+            # ----------------------------------------------------------------
+
+            with Vertical(classes="panel"):
+                yield Static(
+                    "THERMAL",
+                    classes="panel_title"
+                )
+
+                yield Static(
+                    "Controller: ---",
+                    id="controller"
+                )
+
+                yield Static(
+                    "Temperature: --- K",
+                    id="thermal_temperature"
+                )
+
+                yield Static(
+                    "Target: --- K",
+                    id="thermal_target"
+                )
+
+                yield Static(
+                    "Heater output: --- %",
+                    id="thermal_output"
+                )
 
 
-        # --------------------------------------------------------------------
-        # Initial status request
-        # --------------------------------------------------------------------
+            # ----------------------------------------------------------------
+            # Environment
+            # ----------------------------------------------------------------
 
-        if not status_requested:
-            client.sendall(
-                b"CMD,STATUS\n"
-            )
+            with Vertical(classes="panel"):
+                yield Static(
+                    "ENVIRONMENT",
+                    classes="panel_title"
+                )
 
-            on_log(
-                "Sent: CMD,STATUS"
-            )
+                yield Static(
+                    "PADS temperature: --- K",
+                    id="pads_temperature"
+                )
 
-            status_requested = True
+                yield Static(
+                    "Pressure: --- Pa",
+                    id="pads_pressure"
+                )
 
+        yield RichLog(
+            id="log",
+            wrap=True
+        )
 
-        # --------------------------------------------------------------------
-        # Ground station commands
-        # --------------------------------------------------------------------
+        yield Input(
+            placeholder="Command: status, help",
+            id="command"
+        )
 
-        while not command_queue.empty():
-            command = command_queue.get_nowait()
-
-            client.sendall(
-                f"{command}\n".encode("utf-8")
-            )
-
-            on_log(
-                f"Sent: {command}"
-            )
-
-
-        # --------------------------------------------------------------------
-        # Heartbeat
-        # --------------------------------------------------------------------
-
-        if (
-            not waiting_for_ack and
-            current_time >= next_heartbeat
-        ):
-            client.sendall(
-                b"CMD,PING\n"
-            )
-
-            waiting_for_ack = True
-            ack_start_time = current_time
+        yield Footer()
 
 
-        if (
-            waiting_for_ack and
-            current_time - ack_start_time >= ACK_TIMEOUT
-        ):
-            raise ConnectionError(
-                "No ACK received"
-            )
+    # ========================================================================
+    # Startup
+    # ========================================================================
+
+    def on_mount(self):
+        """
+        Start the Ethernet communication thread.
+        """
+
+        ethernet_thread = threading.Thread(
+            target=ethernet_link_run,
+            args=(
+                self.command_queue,
+                self._connection_callback,
+                self._telemetry_callback,
+                self._log_callback
+            ),
+            daemon=True
+        )
+
+        ethernet_thread.start()
 
 
-        # --------------------------------------------------------------------
-        # Receive data
-        # --------------------------------------------------------------------
+    # ========================================================================
+    # Ethernet callbacks
+    # ========================================================================
 
-        try:
-            data = client.recv(4096)
+    def _connection_callback(self, connected):
+        """
+        Receive connection state changes from the Ethernet thread.
+        """
 
-        except socket.timeout:
-            continue
-
-
-        if not data:
-            raise ConnectionError(
-                "Connection closed by Teensy"
-            )
-
-
-        receive_buffer += data.decode(
-            "utf-8",
-            errors="replace"
+        self.call_from_thread(
+            self._set_connection,
+            connected
         )
 
 
-        # TCP is a byte stream.
-        # Process only complete newline-terminated messages.
-        while "\n" in receive_buffer:
-            line, receive_buffer = receive_buffer.split(
-                "\n",
-                1
+    def _telemetry_callback(self, telemetry):
+        """
+        Receive parsed telemetry from the Ethernet thread.
+        """
+
+        self.call_from_thread(
+            self._handle_telemetry,
+            telemetry
+        )
+
+
+    def _log_callback(self, message):
+        """
+        Receive ground station log messages from the Ethernet thread.
+        """
+
+        self.call_from_thread(
+            self._write_log,
+            f"[GS] {message}"
+        )
+
+
+    # ========================================================================
+    # Connection state
+    # ========================================================================
+
+    def _set_connection(self, connected):
+        self.connected = connected
+
+        connection = self.query_one(
+            "#connection",
+            Static
+        )
+
+        if connected:
+            connection.update(
+                "Connection: ONLINE"
             )
 
-            line = line.rstrip("\r")
-
-
-            if not line:
-                continue
-
-
-            # ----------------------------------------------------------------
-            # Heartbeat response
-            # ----------------------------------------------------------------
-
-            if line == "ACK,PING":
-                waiting_for_ack = False
-
-                next_heartbeat = (
-                    time.monotonic() +
-                    HEARTBEAT_INTERVAL
-                )
-
-                continue
-
-
-            # ----------------------------------------------------------------
-            # Command acknowledgement
-            # ----------------------------------------------------------------
-
-            if line == "ACK,STATUS":
-                on_log(
-                    "STATUS acknowledged."
-                )
-
-                continue
-
-
-            # ----------------------------------------------------------------
-            # Telemetry
-            # ----------------------------------------------------------------
-
-            telemetry = parse_telemetry(
-                line
+        else:
+            connection.update(
+                "Connection: OFFLINE"
             )
 
 
-            if telemetry is None:
-                on_log(
-                    f"Unknown message: {line}"
-                )
+    # ========================================================================
+    # Logging
+    # ========================================================================
 
-                continue
+    def _write_log(self, message):
+        self.query_one(
+            "#log",
+            RichLog
+        ).write(
+            message
+        )
 
 
-            on_telemetry(
-                telemetry
+    # ========================================================================
+    # Telemetry
+    # ========================================================================
+
+    def _handle_telemetry(self, telemetry):
+        telemetry_type = telemetry["type"]
+
+
+        # --------------------------------------------------------------------
+        # Live thermal data
+        # --------------------------------------------------------------------
+
+        if telemetry_type == "THERMAL":
+
+            self.query_one(
+                "#thermal_temperature",
+                Static
+            ).update(
+                f"Temperature: "
+                f"{telemetry['temperature_k']:.3f} K"
             )
+
+            self.query_one(
+                "#thermal_output",
+                Static
+            ).update(
+                f"Heater output: "
+                f"{telemetry['output_percent']:.1f} %"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
+        # System status
+        # --------------------------------------------------------------------
+
+        if telemetry_type == "STATUS":
+
+            if telemetry["controller_active"]:
+                controller_state = "ACTIVE"
+            else:
+                controller_state = "INACTIVE"
+
+
+            self.query_one(
+                "#controller",
+                Static
+            ).update(
+                f"Controller: {controller_state}"
+            )
+
+            self.query_one(
+                "#thermal_temperature",
+                Static
+            ).update(
+                f"Temperature: "
+                f"{telemetry['temperature_k']:.3f} K"
+            )
+
+            self.query_one(
+                "#thermal_target",
+                Static
+            ).update(
+                f"Target: "
+                f"{telemetry['target_k']:.2f} K"
+            )
+
+            self.query_one(
+                "#thermal_output",
+                Static
+            ).update(
+                f"Heater output: "
+                f"{telemetry['output_percent']:.1f} %"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
+        # WSEN-PADS
+        # --------------------------------------------------------------------
+
+        if telemetry_type == "PADS":
+
+            self.query_one(
+                "#pads_temperature",
+                Static
+            ).update(
+                f"PADS temperature: "
+                f"{telemetry['temperature_k']:.3f} K"
+            )
+
+            self.query_one(
+                "#pads_pressure",
+                Static
+            ).update(
+                f"Pressure: "
+                f"{telemetry['pressure_pa']:.2f} Pa"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
+        # Flight computer console
+        # --------------------------------------------------------------------
+
+        if telemetry_type == "LOG":
+
+            self._write_log(
+                f"[FC] "
+                f"[{telemetry['level']}] "
+                f"{telemetry['message']}"
+            )
+
+            return
+
+
+    # ========================================================================
+    # Commands
+    # ========================================================================
+
+    def on_input_submitted(
+        self,
+        event: Input.Submitted
+    ):
+        """
+        Process commands entered into the command field.
+        """
+
+        command = event.value.strip()
+
+        event.input.value = ""
+
+        if not command:
+            return
+
+
+        command_lower = command.lower()
+
+
+        # --------------------------------------------------------------------
+        # Local help
+        # --------------------------------------------------------------------
+
+        if command_lower == "help":
+
+            self._write_log(
+                "[GS] Available commands: status, help"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
+        # Commands requiring an active connection
+        # --------------------------------------------------------------------
+
+        if not self.connected:
+
+            self._write_log(
+                "[GS] Cannot send command: not connected."
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
+        # Status request
+        # --------------------------------------------------------------------
+
+        if command_lower == "status":
+
+            self.command_queue.put(
+                "CMD,STATUS"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
+        # Unknown command
+        # --------------------------------------------------------------------
+
+        self._write_log(
+            f"[GS] Unknown command: {command}"
+        )
