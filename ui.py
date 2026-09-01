@@ -38,7 +38,7 @@ class GroundStationApp(App):
 
     #connection {
         height: 3;
-        padding: 1 2;
+        padding: 0 2;
         border: solid white;
     }
 
@@ -74,6 +74,8 @@ class GroundStationApp(App):
 
         self.command_queue = queue.Queue()
         self.connected = False
+
+        self.health = {}
 
 
     # ========================================================================
@@ -141,13 +143,32 @@ class GroundStationApp(App):
                     id="pads_pressure"
                 )
 
+            # ----------------------------------------------------------------
+            # Health monitoring
+            # ----------------------------------------------------------------
+
+            with Vertical(classes="panel"):
+                yield Static(
+                    "HEALTH",
+                    classes="panel_title"
+                )
+
+                yield Static(
+                    "SD: ---\n"
+                    "MAX31865: ---\n"
+                    "PADS: ---\n"
+                    "HIDS: ---\n"
+                    "AIRDOS: ---",
+                    id="health_status"
+                )
+
         yield RichLog(
             id="log",
             wrap=True
         )
 
         yield Input(
-            placeholder="Command: status, help",
+            placeholder="Command: help",
             id="command"
         )
 
@@ -259,35 +280,10 @@ class GroundStationApp(App):
 
 
         # --------------------------------------------------------------------
-        # Live thermal data
+        # Thermal control
         # --------------------------------------------------------------------
 
         if telemetry_type == "THERMAL":
-
-            self.query_one(
-                "#thermal_temperature",
-                Static
-            ).update(
-                f"Temperature: "
-                f"{telemetry['temperature_k']:.3f} K"
-            )
-
-            self.query_one(
-                "#thermal_output",
-                Static
-            ).update(
-                f"Heater output: "
-                f"{telemetry['output_percent']:.1f} %"
-            )
-
-            return
-
-
-        # --------------------------------------------------------------------
-        # System status
-        # --------------------------------------------------------------------
-
-        if telemetry_type == "STATUS":
 
             if telemetry["controller_active"]:
                 controller_state = "ACTIVE"
@@ -302,6 +298,7 @@ class GroundStationApp(App):
                 f"Controller: {controller_state}"
             )
 
+
             self.query_one(
                 "#thermal_temperature",
                 Static
@@ -310,6 +307,7 @@ class GroundStationApp(App):
                 f"{telemetry['temperature_k']:.3f} K"
             )
 
+
             self.query_one(
                 "#thermal_target",
                 Static
@@ -317,6 +315,7 @@ class GroundStationApp(App):
                 f"Target: "
                 f"{telemetry['target_k']:.2f} K"
             )
+
 
             self.query_one(
                 "#thermal_output",
@@ -343,6 +342,7 @@ class GroundStationApp(App):
                 f"{telemetry['temperature_k']:.3f} K"
             )
 
+
             self.query_one(
                 "#pads_pressure",
                 Static
@@ -355,7 +355,7 @@ class GroundStationApp(App):
 
 
         # --------------------------------------------------------------------
-        # Flight computer console
+        # Flight computer log
         # --------------------------------------------------------------------
 
         if telemetry_type == "LOG":
@@ -365,6 +365,25 @@ class GroundStationApp(App):
                 f"[{telemetry['level']}] "
                 f"{telemetry['message']}"
             )
+
+            return
+
+        # --------------------------------------------------------------------
+        # Health monitoring
+        # --------------------------------------------------------------------
+
+        if telemetry_type == "HEALTH":
+
+            subsystem = telemetry["subsystem"]
+
+            if subsystem == "MAX31865":
+                key = f"MAX31865_{telemetry['sensor']}"
+            else:
+                key = subsystem
+
+            self.health[key] = telemetry
+
+            self._update_health_panel()
 
             return
 
@@ -399,7 +418,7 @@ class GroundStationApp(App):
         if command_lower == "help":
 
             self._write_log(
-                "[GS] Available commands: status, help"
+                "[GS] Available commands: help"
             )
 
             return
@@ -419,22 +438,108 @@ class GroundStationApp(App):
 
 
         # --------------------------------------------------------------------
-        # Status request
-        # --------------------------------------------------------------------
-
-        if command_lower == "status":
-
-            self.command_queue.put(
-                "CMD,STATUS"
-            )
-
-            return
-
-
-        # --------------------------------------------------------------------
         # Unknown command
         # --------------------------------------------------------------------
 
         self._write_log(
             f"[GS] Unknown command: {command}"
         )
+
+        def _update_health_panel(self):
+            """
+            Update the permanent health overview.
+            """
+
+            lines = []
+
+            # ------------------------------------------------------------------------
+            # SD card
+            # ------------------------------------------------------------------------
+
+            sd = self.health.get("SD")
+
+            if sd:
+                lines.append(
+                    f"SD: {sd['state']}  "
+                    f"errors: {sd['error_count']}"
+                )
+            else:
+                lines.append("SD: ---")
+
+            # ------------------------------------------------------------------------
+            # MAX31865 temperature sensors
+            # ------------------------------------------------------------------------
+
+            max_keys = sorted(
+                key for key in self.health
+                if key.startswith("MAX31865_")
+            )
+
+            if max_keys:
+                for key in max_keys:
+                    data = self.health[key]
+
+                    lines.append(
+                        f"TEMP {data['sensor']}: {data['state']}  "
+                        f"fault: {data['fault']}  "
+                        f"errors: {data['error_count']}"
+                    )
+            else:
+                lines.append("MAX31865: ---")
+
+            # ------------------------------------------------------------------------
+            # WSEN-PADS
+            # ------------------------------------------------------------------------
+
+            pads = self.health.get("PADS")
+
+            if pads:
+                lines.append(
+                    f"PADS: {pads['state']}  "
+                    f"errors: {pads['error_count']}"
+                )
+            else:
+                lines.append("PADS: ---")
+
+            # ------------------------------------------------------------------------
+            # WSEN-HIDS
+            # ------------------------------------------------------------------------
+
+            hids = self.health.get("HIDS")
+
+            if hids:
+                lines.append(
+                    f"HIDS: {hids['state']}  "
+                    f"errors: {hids['error_count']}"
+                )
+            else:
+                lines.append("HIDS: ---")
+
+            # ------------------------------------------------------------------------
+            # AIRDOS
+            # ------------------------------------------------------------------------
+
+            airdos = self.health.get("AIRDOS")
+
+            if airdos:
+                age_ms = airdos["last_message_age_ms"]
+
+                if age_ms == 0 and airdos["state"] != "OK":
+                    age_text = "---"
+                else:
+                    age_text = f"{age_ms / 1000.0:.1f} s"
+
+                lines.append(
+                    f"AIRDOS: {airdos['state']}  "
+                    f"last: {age_text}  "
+                    f"overflows: {airdos['overflow_count']}"
+                )
+            else:
+                lines.append("AIRDOS: ---")
+
+            self.query_one(
+                "#health_status",
+                Static
+            ).update(
+                "\n".join(lines)
+            )

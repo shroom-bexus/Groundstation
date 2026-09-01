@@ -33,9 +33,6 @@ def parse_telemetry(line):
     # Format:
     # LOG,level,message
     #
-    # Example:
-    # LOG,INFO,Initialization complete.
-    #
 
     if line.startswith("LOG,"):
         parts = line.split(",", 2)
@@ -85,49 +82,25 @@ def parse_telemetry(line):
 
 
     # ------------------------------------------------------------------------
-    # System status
-    # ------------------------------------------------------------------------
-    #
-    # Format:
-    # STATUS,time_ms,controller_active,target_K,output_percent,temp_K
-    #
-
-    if parts[0] == "STATUS":
-        if len(parts) != 6:
-            return None
-
-        try:
-            return {
-                "type": "STATUS",
-                "time_ms": int(parts[1]),
-                "controller_active": bool(int(parts[2])),
-                "target_k": float(parts[3]),
-                "output_percent": float(parts[4]),
-                "temperature_k": float(parts[5]),
-            }
-
-        except ValueError:
-            return None
-
-
-    # ------------------------------------------------------------------------
     # Thermal control
     # ------------------------------------------------------------------------
     #
     # Format:
-    # THERMAL,time_ms,temperature_K,output_percent
+    # THERMAL,time_ms,active,target_K,temperature_K,output_percent
     #
 
     if parts[0] == "THERMAL":
-        if len(parts) != 4:
+        if len(parts) != 6:
             return None
 
         try:
             return {
                 "type": "THERMAL",
                 "time_ms": int(parts[1]),
-                "temperature_k": float(parts[2]),
-                "output_percent": float(parts[3]),
+                "controller_active": bool(int(parts[2])),
+                "target_k": float(parts[3]),
+                "temperature_k": float(parts[4]),
+                "output_percent": float(parts[5]),
             }
 
         except ValueError:
@@ -135,7 +108,75 @@ def parse_telemetry(line):
 
 
     # ------------------------------------------------------------------------
-    # Unknown message type
+    # Health monitoring
+    # ------------------------------------------------------------------------
+    #
+    # Formats:
+    #
+    # HEALTH,time_ms,SD,state,error_count
+    # HEALTH,time_ms,MAX31865,sensor,state,fault,error_count
+    # HEALTH,time_ms,PADS,state,error_count
+    # HEALTH,time_ms,HIDS,state,error_count
+    # HEALTH,time_ms,AIRDOS,state,last_message_age_ms,overflow_count
+    #
+
+    if parts[0] == "HEALTH":
+        if len(parts) < 5:
+            return None
+
+        try:
+            time_ms = int(parts[1])
+            subsystem = parts[2]
+
+            # SD / PADS / HIDS
+            if subsystem in ("SD", "PADS", "HIDS"):
+                if len(parts) != 5:
+                    return None
+
+                return {
+                    "type": "HEALTH",
+                    "time_ms": time_ms,
+                    "subsystem": subsystem,
+                    "state": parts[3],
+                    "error_count": int(parts[4]),
+                }
+
+            # MAX31865
+            if subsystem == "MAX31865":
+                if len(parts) != 7:
+                    return None
+
+                return {
+                    "type": "HEALTH",
+                    "time_ms": time_ms,
+                    "subsystem": subsystem,
+                    "sensor": int(parts[3]),
+                    "state": parts[4],
+                    "fault": int(parts[5]),
+                    "error_count": int(parts[6]),
+                }
+
+            # AIRDOS
+            if subsystem == "AIRDOS":
+                if len(parts) != 6:
+                    return None
+
+                return {
+                    "type": "HEALTH",
+                    "time_ms": time_ms,
+                    "subsystem": subsystem,
+                    "state": parts[3],
+                    "last_message_age_ms": int(parts[4]),
+                    "overflow_count": int(parts[5]),
+                }
+
+        except ValueError:
+            return None
+
+        return None
+
+    # ------------------------------------------------------------------------
+    # Unknown message
     # ------------------------------------------------------------------------
 
     return None

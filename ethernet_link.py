@@ -86,7 +86,9 @@ def ethernet_link_run(
                 f"Connection lost: {error}"
             )
 
-            time.sleep(RECONNECT_INTERVAL)
+            time.sleep(
+                RECONNECT_INTERVAL
+            )
 
 
 # ============================================================================
@@ -112,27 +114,9 @@ def _handle_connection(
     waiting_for_ack = False
     ack_start_time = 0.0
 
-    status_requested = False
-
 
     while True:
         current_time = time.monotonic()
-
-
-        # --------------------------------------------------------------------
-        # Initial status request
-        # --------------------------------------------------------------------
-
-        if not status_requested:
-            client.sendall(
-                b"CMD,STATUS\n"
-            )
-
-            on_log(
-                "Sent: CMD,STATUS"
-            )
-
-            status_requested = True
 
 
         # --------------------------------------------------------------------
@@ -233,9 +217,17 @@ def _handle_connection(
             # Command acknowledgement
             # ----------------------------------------------------------------
 
-            if line == "ACK,STATUS":
+            if line.startswith("ACK,"):
                 on_log(
-                    "STATUS acknowledged."
+                    f"Command acknowledged: {line[4:]}"
+                )
+
+                continue
+
+
+            if line.startswith("NACK,"):
+                on_log(
+                    f"Command rejected: {line[5:]}"
                 )
 
                 continue
