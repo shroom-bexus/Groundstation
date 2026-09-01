@@ -80,13 +80,12 @@ def parse_telemetry(line):
         except ValueError:
             return None
 
-
     # ------------------------------------------------------------------------
     # Thermal control
     # ------------------------------------------------------------------------
     #
     # Format:
-    # THERMAL,time_ms,active,target_K,temperature_K,output_percent
+    # THERMAL,time_ms,enabled,target_K,temperature_K,output_percent
     #
 
     if parts[0] == "THERMAL":
@@ -97,10 +96,35 @@ def parse_telemetry(line):
             return {
                 "type": "THERMAL",
                 "time_ms": int(parts[1]),
-                "controller_active": bool(int(parts[2])),
+                "controller_enabled": bool(int(parts[2])),
                 "target_k": float(parts[3]),
                 "temperature_k": float(parts[4]),
                 "output_percent": float(parts[5]),
+            }
+
+        except ValueError:
+            return None
+
+    # ------------------------------------------------------------------------
+    # Heaters
+    # ------------------------------------------------------------------------
+    #
+    # Format:
+    # HEATERS,time_ms,heater1,heater2,heater3,heater4
+    #
+
+    if parts[0] == "HEATERS":
+        if len(parts) != 6:
+            return None
+
+        try:
+            return {
+                "type": "HEATERS",
+                "time_ms": int(parts[1]),
+                "heater_1": float(parts[2]),
+                "heater_2": float(parts[3]),
+                "heater_3": float(parts[4]),
+                "heater_4": float(parts[5]),
             }
 
         except ValueError:

@@ -32,10 +32,18 @@ from telemetry import parse_telemetry
 TEENSY_IP = "172.16.18.131"
 TEENSY_PORT = 5000
 
-HEARTBEAT_INTERVAL = 2.0
-ACK_TIMEOUT = 3.0
 
-RECONNECT_INTERVAL = 1.0
+# ============================================================================
+# Ethernet timing
+# ============================================================================
+
+CONNECT_TIMEOUT = 6.0
+RECEIVE_TIMEOUT = 0.5
+
+HEARTBEAT_INTERVAL = 10.0
+ACK_TIMEOUT = 6.0
+
+RECONNECT_INTERVAL = 5.0
 
 
 # ============================================================================
@@ -61,8 +69,8 @@ def ethernet_link_run(
             )
 
             with socket.create_connection(
-                (TEENSY_IP, TEENSY_PORT),
-                timeout=6.0
+                    (TEENSY_IP, TEENSY_PORT),
+                    timeout=CONNECT_TIMEOUT
             ) as client:
 
                 on_connection(True)
@@ -105,7 +113,9 @@ def _handle_connection(
     Handle communication while a TCP connection is active.
     """
 
-    client.settimeout(0.5)
+    client.settimeout(
+        RECEIVE_TIMEOUT
+    )
 
     receive_buffer = ""
 
@@ -230,6 +240,12 @@ def _handle_connection(
                     f"Command rejected: {line[5:]}"
                 )
 
+                continue
+
+            if line.startswith("WARN,"):
+                on_log(
+                    f"Warning: {line[5:]}"
+                )
                 continue
 
 

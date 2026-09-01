@@ -22,6 +22,16 @@ from textual.widgets import Footer, Header, Input, RichLog, Static
 from ethernet_link import ethernet_link_run
 
 
+SHROOM_LOGO = r"""
+███████╗██╗  ██╗██████╗  ██████╗  ██████╗ ███╗   ███╗
+██╔════╝██║  ██║██╔══██╗██╔═══██╗██╔═══██╗████╗ ████║
+███████╗███████║██████╔╝██║   ██║██║   ██║██╔████╔██║
+╚════██║██╔══██║██╔══██╗██║   ██║██║   ██║██║╚██╔╝██║
+███████║██║  ██║██║  ██║╚██████╔╝╚██████╔╝██║ ╚═╝ ██║
+╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝     ╚═╝
+"""
+
+
 class GroundStationApp(App):
     """
     SHROOM Ground Station terminal user interface.
@@ -36,10 +46,17 @@ class GroundStationApp(App):
         layout: vertical;
     }
 
+    #logo {
+        height: 7;
+        content-align: center middle;
+        text-style: bold;
+    }
+
     #connection {
         height: 3;
         padding: 0 2;
         border: solid white;
+        text-style: bold;
     }
 
     #data_area {
@@ -58,13 +75,15 @@ class GroundStationApp(App):
     }
 
     #log {
-        height: 12;
+        height: 16;
         border: solid white;
-        padding: 0 1;
+        padding: 1 2;
     }
 
     #command {
-        height: 3;
+        height: 5;
+        border: solid white;
+        padding: 1 2;
     }
     """
 
@@ -86,9 +105,15 @@ class GroundStationApp(App):
         yield Header()
 
         yield Static(
+            SHROOM_LOGO,
+            id="logo"
+        )
+
+        yield Static(
             "Connection: OFFLINE",
             id="connection"
         )
+
 
         with Horizontal(id="data_area"):
 
@@ -103,8 +128,8 @@ class GroundStationApp(App):
                 )
 
                 yield Static(
-                    "Controller: ---",
-                    id="controller"
+                    "PID: ---",
+                    id="thermal_enabled"
                 )
 
                 yield Static(
@@ -118,8 +143,20 @@ class GroundStationApp(App):
                 )
 
                 yield Static(
-                    "Heater output: --- %",
+                    "Controller output: --- %",
                     id="thermal_output"
+                )
+
+                yield Static(
+                    "",
+                )
+
+                yield Static(
+                    "Heater 1: --- %\n"
+                    "Heater 2: --- %\n"
+                    "Heater 3: --- %\n"
+                    "Heater 4: --- %",
+                    id="heater_outputs"
                 )
 
 
@@ -143,6 +180,7 @@ class GroundStationApp(App):
                     id="pads_pressure"
                 )
 
+
             # ----------------------------------------------------------------
             # Health monitoring
             # ----------------------------------------------------------------
@@ -162,10 +200,20 @@ class GroundStationApp(App):
                     id="health_status"
                 )
 
+
+        # --------------------------------------------------------------------
+        # Console
+        # --------------------------------------------------------------------
+
         yield RichLog(
             id="log",
             wrap=True
         )
+
+
+        # --------------------------------------------------------------------
+        # Command input
+        # --------------------------------------------------------------------
 
         yield Input(
             placeholder="Command: help",
@@ -285,17 +333,24 @@ class GroundStationApp(App):
 
         if telemetry_type == "THERMAL":
 
-            if telemetry["controller_active"]:
-                controller_state = "ACTIVE"
+            if telemetry["controller_enabled"]:
+                enabled_state = "ON"
             else:
-                controller_state = "INACTIVE"
+                enabled_state = "OFF"
+
+            self.query_one(
+                "#thermal_enabled",
+                Static
+            ).update(
+                f"PID: {enabled_state}"
+            )
 
 
             self.query_one(
-                "#controller",
+                "#thermal_enabled",
                 Static
             ).update(
-                f"Controller: {controller_state}"
+                f"Thermal control: {enabled_state}"
             )
 
 
@@ -321,8 +376,27 @@ class GroundStationApp(App):
                 "#thermal_output",
                 Static
             ).update(
-                f"Heater output: "
+                f"Controller output: "
                 f"{telemetry['output_percent']:.1f} %"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
+        # Heater outputs
+        # --------------------------------------------------------------------
+
+        if telemetry_type == "HEATERS":
+
+            self.query_one(
+                "#heater_outputs",
+                Static
+            ).update(
+                f"Heater 1: {telemetry['heater_1']:.1f} %\n"
+                f"Heater 2: {telemetry['heater_2']:.1f} %\n"
+                f"Heater 3: {telemetry['heater_3']:.1f} %\n"
+                f"Heater 4: {telemetry['heater_4']:.1f} %"
             )
 
             return
@@ -368,6 +442,7 @@ class GroundStationApp(App):
 
             return
 
+
         # --------------------------------------------------------------------
         # Health monitoring
         # --------------------------------------------------------------------
@@ -386,6 +461,132 @@ class GroundStationApp(App):
             self._update_health_panel()
 
             return
+
+
+    # ========================================================================
+    # Health monitoring
+    # ========================================================================
+
+    def _update_health_panel(self):
+        """
+        Update the permanent health overview.
+        """
+
+        lines = []
+
+
+        # --------------------------------------------------------------------
+        # SD card
+        # --------------------------------------------------------------------
+
+        sd = self.health.get("SD")
+
+        if sd:
+            lines.append(
+                f"SD: {sd['state']}  "
+                f"errors: {sd['error_count']}"
+            )
+        else:
+            lines.append(
+                "SD: ---"
+            )
+
+
+        # --------------------------------------------------------------------
+        # MAX31865 temperature sensors
+        # --------------------------------------------------------------------
+
+        max_keys = sorted(
+            key for key in self.health
+            if key.startswith("MAX31865_")
+        )
+
+        if max_keys:
+
+            for key in max_keys:
+                data = self.health[key]
+
+                lines.append(
+                    f"TEMP {data['sensor']}: "
+                    f"{data['state']}  "
+                    f"fault: {data['fault']}  "
+                    f"errors: {data['error_count']}"
+                )
+
+        else:
+            lines.append(
+                "MAX31865: ---"
+            )
+
+
+        # --------------------------------------------------------------------
+        # WSEN-PADS
+        # --------------------------------------------------------------------
+
+        pads = self.health.get("PADS")
+
+        if pads:
+            lines.append(
+                f"PADS: {pads['state']}  "
+                f"errors: {pads['error_count']}"
+            )
+        else:
+            lines.append(
+                "PADS: ---"
+            )
+
+
+        # --------------------------------------------------------------------
+        # WSEN-HIDS
+        # --------------------------------------------------------------------
+
+        hids = self.health.get("HIDS")
+
+        if hids:
+            lines.append(
+                f"HIDS: {hids['state']}  "
+                f"errors: {hids['error_count']}"
+            )
+        else:
+            lines.append(
+                "HIDS: ---"
+            )
+
+
+        # --------------------------------------------------------------------
+        # AIRDOS
+        # --------------------------------------------------------------------
+
+        airdos = self.health.get("AIRDOS")
+
+        if airdos:
+            age_ms = airdos["last_message_age_ms"]
+
+            if age_ms == 0 and airdos["state"] != "OK":
+                age_text = "---"
+            else:
+                age_text = (
+                    f"{age_ms / 1000.0:.1f} s"
+                )
+
+            lines.append(
+                f"AIRDOS: {airdos['state']}  "
+                f"last: {age_text}  "
+                f"overflows: {airdos['overflow_count']}"
+            )
+
+        else:
+            lines.append(
+                "AIRDOS: ---"
+            )
+
+
+        self.query_one(
+            "#health_status",
+            Static
+        ).update(
+            "\n".join(lines)
+        )
 
 
     # ========================================================================
@@ -418,7 +619,27 @@ class GroundStationApp(App):
         if command_lower == "help":
 
             self._write_log(
-                "[GS] Available commands: help"
+                "[GS] Available commands:"
+            )
+
+            self._write_log(
+                "  target <K>"
+            )
+
+            self._write_log(
+                "  thermal on"
+            )
+
+            self._write_log(
+                "  thermal off"
+            )
+
+            self._write_log(
+                "  heater <1-4|all> <0-100>"
+            )
+
+            self._write_log(
+                "  help"
             )
 
             return
@@ -438,108 +659,154 @@ class GroundStationApp(App):
 
 
         # --------------------------------------------------------------------
+        # Set thermal target
+        # --------------------------------------------------------------------
+
+        if command_lower.startswith("target "):
+            parts = command.split()
+
+            if len(parts) != 2:
+                self._write_log(
+                    "[GS] Usage: target <K>"
+                )
+                return
+
+
+            try:
+                target_k = float(
+                    parts[1]
+                )
+
+            except ValueError:
+                self._write_log(
+                    "[GS] Invalid target temperature."
+                )
+                return
+
+
+            self.command_queue.put(
+                f"CMD,SET_TARGET,{target_k:.2f}"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
+        # Thermal controller
+        # --------------------------------------------------------------------
+
+        if command_lower == "thermal on":
+
+            self.command_queue.put(
+                "CMD,THERMAL_ON"
+            )
+
+            return
+
+
+        if command_lower == "thermal off":
+
+            self.command_queue.put(
+                "CMD,THERMAL_OFF"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
+        # Manual heater control
+        # --------------------------------------------------------------------
+
+        if command_lower.startswith("heater "):
+            parts = command.split()
+
+            if len(parts) != 3:
+                self._write_log(
+                    "[GS] Usage: heater <1-4|all> <0-100>"
+                )
+                return
+
+
+            heater_argument = (
+                parts[1].lower()
+            )
+
+
+            try:
+                power_percent = float(
+                    parts[2]
+                )
+
+            except ValueError:
+                self._write_log(
+                    "[GS] Invalid heater power."
+                )
+                return
+
+
+            if (
+                power_percent < 0.0 or
+                power_percent > 100.0
+            ):
+                self._write_log(
+                    "[GS] Heater power must be 0...100 %."
+                )
+                return
+
+
+            # ----------------------------------------------------------------
+            # All heaters
+            # ----------------------------------------------------------------
+
+            if heater_argument == "all":
+
+                self.command_queue.put(
+                    f"CMD,SET_HEATER,ALL,"
+                    f"{power_percent:.1f}"
+                )
+
+                return
+
+
+            # ----------------------------------------------------------------
+            # Individual heater
+            # ----------------------------------------------------------------
+
+            try:
+                heater_number = int(
+                    heater_argument
+                )
+
+            except ValueError:
+                self._write_log(
+                    "[GS] Heater must be 1...4 or all."
+                )
+                return
+
+
+            if (
+                heater_number < 1 or
+                heater_number > 4
+            ):
+                self._write_log(
+                    "[GS] Heater must be 1...4 or all."
+                )
+                return
+
+
+            self.command_queue.put(
+                f"CMD,SET_HEATER,"
+                f"{heater_number},"
+                f"{power_percent:.1f}"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
         # Unknown command
         # --------------------------------------------------------------------
 
         self._write_log(
             f"[GS] Unknown command: {command}"
         )
-
-    def _update_health_panel(self):
-            """
-            Update the permanent health overview.
-            """
-
-            lines = []
-
-            # ------------------------------------------------------------------------
-            # SD card
-            # ------------------------------------------------------------------------
-
-            sd = self.health.get("SD")
-
-            if sd:
-                lines.append(
-                    f"SD: {sd['state']}  "
-                    f"errors: {sd['error_count']}"
-                )
-            else:
-                lines.append("SD: ---")
-
-            # ------------------------------------------------------------------------
-            # MAX31865 temperature sensors
-            # ------------------------------------------------------------------------
-
-            max_keys = sorted(
-                key for key in self.health
-                if key.startswith("MAX31865_")
-            )
-
-            if max_keys:
-                for key in max_keys:
-                    data = self.health[key]
-
-                    lines.append(
-                        f"TEMP {data['sensor']}: {data['state']}  "
-                        f"fault: {data['fault']}  "
-                        f"errors: {data['error_count']}"
-                    )
-            else:
-                lines.append("MAX31865: ---")
-
-            # ------------------------------------------------------------------------
-            # WSEN-PADS
-            # ------------------------------------------------------------------------
-
-            pads = self.health.get("PADS")
-
-            if pads:
-                lines.append(
-                    f"PADS: {pads['state']}  "
-                    f"errors: {pads['error_count']}"
-                )
-            else:
-                lines.append("PADS: ---")
-
-            # ------------------------------------------------------------------------
-            # WSEN-HIDS
-            # ------------------------------------------------------------------------
-
-            hids = self.health.get("HIDS")
-
-            if hids:
-                lines.append(
-                    f"HIDS: {hids['state']}  "
-                    f"errors: {hids['error_count']}"
-                )
-            else:
-                lines.append("HIDS: ---")
-
-            # ------------------------------------------------------------------------
-            # AIRDOS
-            # ------------------------------------------------------------------------
-
-            airdos = self.health.get("AIRDOS")
-
-            if airdos:
-                age_ms = airdos["last_message_age_ms"]
-
-                if age_ms == 0 and airdos["state"] != "OK":
-                    age_text = "---"
-                else:
-                    age_text = f"{age_ms / 1000.0:.1f} s"
-
-                lines.append(
-                    f"AIRDOS: {airdos['state']}  "
-                    f"last: {age_text}  "
-                    f"overflows: {airdos['overflow_count']}"
-                )
-            else:
-                lines.append("AIRDOS: ---")
-
-            self.query_one(
-                "#health_status",
-                Static
-            ).update(
-                "\n".join(lines)
-            )
