@@ -62,7 +62,7 @@ def ethernet_link_run(
 
             with socket.create_connection(
                 (TEENSY_IP, TEENSY_PORT),
-                timeout=3.0
+                timeout=6.0
             ) as client:
 
                 on_connection(True)

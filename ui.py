@@ -445,7 +445,7 @@ class GroundStationApp(App):
             f"[GS] Unknown command: {command}"
         )
 
-        def _update_health_panel(self):
+    def _update_health_panel(self):
             """
             Update the permanent health overview.
             """
