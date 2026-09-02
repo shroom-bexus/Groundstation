@@ -20,6 +20,12 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Footer, Header, Input, RichLog, Static
 
+from bandwidth import (
+    BandwidthSettings,
+    MAX_LIMIT_KBIT_S,
+    MIN_LIMIT_KBIT_S,
+    valid_limit,
+)
 from ethernet_link import ethernet_link_run
 
 
@@ -32,6 +38,19 @@ SHROOM_LOGO = r"""
         ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝     ╚═╝
 Stratospheric High-Altitude Radiation Observation of Organismic Mycology
 """
+
+
+def _parse_bandwidth_limit(text):
+    """Parse kbit/s or the word 'unlimited' into a numeric limit."""
+
+    if text.lower() == "unlimited":
+        return 0.0
+
+    value = float(text)
+    if not valid_limit(value):
+        raise ValueError
+
+    return value
 
 
 class GroundStationApp(App):
@@ -95,6 +114,9 @@ class GroundStationApp(App):
 
         self.command_queue = queue.Queue()
         self.connected = False
+        self.bandwidth = BandwidthSettings()
+        self.upload_rate_kbit_s = 0.0
+        self.download_rate_kbit_s = 0.0
 
         self.health = {}
 
@@ -112,7 +134,7 @@ class GroundStationApp(App):
         )
 
         yield Static(
-            "Connection: OFFLINE",
+            self._connection_text(),
             id="connection"
         )
 
@@ -255,7 +277,9 @@ class GroundStationApp(App):
             target=ethernet_link_run,
             args=(
                 self.command_queue,
+                self.bandwidth,
                 self._connection_callback,
+                self._rate_callback,
                 self._telemetry_callback,
                 self._log_callback
             ),
@@ -291,6 +315,16 @@ class GroundStationApp(App):
         )
 
 
+    def _rate_callback(self, upload_kbit_s, download_kbit_s):
+        """Receive measured payload rates from the Ethernet thread."""
+
+        self.call_from_thread(
+            self._set_rates,
+            upload_kbit_s,
+            download_kbit_s
+        )
+
+
     def _log_callback(self, message):
         """
         Receive ground station log messages from the Ethernet thread.
@@ -309,20 +343,43 @@ class GroundStationApp(App):
     def _set_connection(self, connected):
         self.connected = connected
 
+        if not connected:
+            self.upload_rate_kbit_s = 0.0
+            self.download_rate_kbit_s = 0.0
+
+        self._update_connection_panel()
+
+
+    def _set_rates(self, upload_kbit_s, download_kbit_s):
+        self.upload_rate_kbit_s = upload_kbit_s
+        self.download_rate_kbit_s = download_kbit_s
+        self._update_connection_panel()
+
+
+    @staticmethod
+    def _format_limit(limit_kbit_s):
+        return "unlimited" if limit_kbit_s == 0.0 else f"{limit_kbit_s:.1f}"
+
+
+    def _connection_text(self):
+        state = "ONLINE" if self.connected else "OFFLINE"
+        uplink_limit, downlink_limit = self.bandwidth.get_limits()
+        return (
+            f"Connection: {state}    "
+            f"Upload: {self.upload_rate_kbit_s:.1f} / "
+            f"{self._format_limit(uplink_limit)} kbit/s    "
+            f"Download: {self.download_rate_kbit_s:.1f} / "
+            f"{self._format_limit(downlink_limit)} kbit/s"
+        )
+
+
+    def _update_connection_panel(self):
+
         connection = self.query_one(
             "#connection",
             Static
         )
-
-        if connected:
-            connection.update(
-                "Connection: ONLINE"
-            )
-
-        else:
-            connection.update(
-                "Connection: OFFLINE"
-            )
+        connection.update(self._connection_text())
 
 
     # ========================================================================
@@ -702,6 +759,18 @@ class GroundStationApp(App):
             )
 
             self._write_log(
+                "  rates <upload> <download>  (kbit/s)"
+            )
+
+            self._write_log(
+                "  upload <kbit/s|unlimited>"
+            )
+
+            self._write_log(
+                "  download <kbit/s|unlimited>"
+            )
+
+            self._write_log(
                 "  heater <1-4|all> <0-100>"
             )
 
@@ -709,6 +778,71 @@ class GroundStationApp(App):
                 "  help"
             )
 
+            return
+
+
+        # --------------------------------------------------------------------
+        # Bandwidth limits (also available while offline)
+        # --------------------------------------------------------------------
+
+        command_parts = command.split()
+        bandwidth_command = command_parts[0].lower()
+
+        if bandwidth_command in ("rates", "upload", "download"):
+            expected_parts = 3 if bandwidth_command == "rates" else 2
+            if len(command_parts) != expected_parts:
+                usage = (
+                    "rates <upload> <download>"
+                    if bandwidth_command == "rates"
+                    else f"{bandwidth_command} <kbit/s|unlimited>"
+                )
+                self._write_log(f"[GS] Usage: {usage}")
+                return
+
+            uplink_limit, downlink_limit = self.bandwidth.get_limits()
+
+            try:
+                if bandwidth_command == "rates":
+                    uplink_limit = _parse_bandwidth_limit(command_parts[1])
+                    downlink_limit = _parse_bandwidth_limit(command_parts[2])
+                elif bandwidth_command == "upload":
+                    uplink_limit = _parse_bandwidth_limit(command_parts[1])
+                else:
+                    downlink_limit = _parse_bandwidth_limit(command_parts[1])
+            except ValueError:
+                self._write_log(
+                    f"[GS] Rate must be {MIN_LIMIT_KBIT_S:.0f}..."
+                    f"{MAX_LIMIT_KBIT_S:.0f} kbit/s or unlimited."
+                )
+                return
+
+            try:
+                saved = self.bandwidth.set_limits(
+                    uplink_limit,
+                    downlink_limit
+                )
+            except OSError as error:
+                self._write_log(
+                    f"[GS] Could not save bandwidth limits: {error}"
+                )
+                return
+
+            if not saved:
+                self._write_log("[GS] Invalid bandwidth limits.")
+                return
+
+            self._update_connection_panel()
+
+            if self.connected:
+                self.command_queue.put(
+                    f"CMD,SET_DOWNLINK_LIMIT,{downlink_limit:.6g}"
+                )
+
+            self._write_log(
+                "[GS] Bandwidth limits: "
+                f"upload {self._format_limit(uplink_limit)}, "
+                f"download {self._format_limit(downlink_limit)} kbit/s"
+            )
             return
 
 
@@ -829,7 +963,6 @@ class GroundStationApp(App):
         # Individual PID gain
         # --------------------------------------------------------------------
 
-        command_parts = command.split()
         gain_commands = {
             "kp": "SET_KP",
             "ki": "SET_KI",

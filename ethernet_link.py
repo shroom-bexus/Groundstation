@@ -45,6 +45,75 @@ ACK_TIMEOUT = 6.0
 
 RECONNECT_INTERVAL = 5.0
 
+RATE_UPDATE_INTERVAL = 1.0
+
+
+class _UplinkLimiter:
+    """Limit sent TCP payload without delaying the Teensy flight loop."""
+
+    def __init__(self, bandwidth_settings):
+        self._settings = bandwidth_settings
+        self._window_start = time.monotonic()
+        self._window_bytes = 0
+        self._last_limit = None
+
+    def wait_for(self, byte_count):
+        while True:
+            uplink_limit, _ = self._settings.get_limits()
+            now = time.monotonic()
+
+            if uplink_limit != self._last_limit or now - self._window_start >= 1.0:
+                self._last_limit = uplink_limit
+                self._window_start = now
+                self._window_bytes = 0
+
+            if uplink_limit == 0.0:
+                return
+
+            maximum_bytes = int(uplink_limit * 125.0)
+            if self._window_bytes + byte_count <= maximum_bytes:
+                self._window_bytes += byte_count
+                return
+
+            time.sleep(max(0.0, self._window_start + 1.0 - now))
+
+
+class _RateMeter:
+    """Measure TCP payload rates over approximately one-second windows."""
+
+    def __init__(self, on_rates):
+        self._on_rates = on_rates
+        self._window_start = time.monotonic()
+        self._upload_bytes = 0
+        self._download_bytes = 0
+
+    def add_upload(self, byte_count):
+        self._upload_bytes += byte_count
+
+    def add_download(self, byte_count):
+        self._download_bytes += byte_count
+
+    def update(self):
+        now = time.monotonic()
+        elapsed = now - self._window_start
+        if elapsed < RATE_UPDATE_INTERVAL:
+            return
+
+        self._on_rates(
+            self._upload_bytes * 8.0 / elapsed / 1000.0,
+            self._download_bytes * 8.0 / elapsed / 1000.0
+        )
+        self._window_start = now
+        self._upload_bytes = 0
+        self._download_bytes = 0
+
+
+def _send_line(client, line, limiter, rate_meter):
+    payload = f"{line}\n".encode("utf-8")
+    limiter.wait_for(len(payload))
+    client.sendall(payload)
+    rate_meter.add_upload(len(payload))
+
 
 # ============================================================================
 # Connection handling
@@ -52,7 +121,9 @@ RECONNECT_INTERVAL = 5.0
 
 def ethernet_link_run(
     command_queue,
+    bandwidth_settings,
     on_connection,
+    on_rates,
     on_telemetry,
     on_log
 ):
@@ -80,12 +151,15 @@ def ethernet_link_run(
                     _handle_connection(
                         client,
                         command_queue,
+                        bandwidth_settings,
+                        on_rates,
                         on_telemetry,
                         on_log
                     )
 
                 finally:
                     on_connection(False)
+                    on_rates(0.0, 0.0)
 
         except (ConnectionError, OSError) as error:
             on_connection(False)
@@ -106,6 +180,8 @@ def ethernet_link_run(
 def _handle_connection(
     client,
     command_queue,
+    bandwidth_settings,
+    on_rates,
     on_telemetry,
     on_log
 ):
@@ -124,6 +200,18 @@ def _handle_connection(
     waiting_for_ack = False
     ack_start_time = 0.0
 
+    limiter = _UplinkLimiter(bandwidth_settings)
+    rate_meter = _RateMeter(on_rates)
+
+    # Reapply the saved Teensy-side limit after every reconnect or reset.
+    _, downlink_limit = bandwidth_settings.get_limits()
+    _send_line(
+        client,
+        f"CMD,SET_DOWNLINK_LIMIT,{downlink_limit:.6g}",
+        limiter,
+        rate_meter
+    )
+
 
     while True:
         current_time = time.monotonic()
@@ -136,8 +224,11 @@ def _handle_connection(
         while not command_queue.empty():
             command = command_queue.get_nowait()
 
-            client.sendall(
-                f"{command}\n".encode("utf-8")
+            _send_line(
+                client,
+                command,
+                limiter,
+                rate_meter
             )
 
             on_log(
@@ -153,8 +244,11 @@ def _handle_connection(
             not waiting_for_ack and
             current_time >= next_heartbeat
         ):
-            client.sendall(
-                b"CMD,PING\n"
+            _send_line(
+                client,
+                "CMD,PING",
+                limiter,
+                rate_meter
             )
 
             waiting_for_ack = True
@@ -178,6 +272,7 @@ def _handle_connection(
             data = client.recv(4096)
 
         except socket.timeout:
+            rate_meter.update()
             continue
 
 
@@ -185,6 +280,9 @@ def _handle_connection(
             raise ConnectionError(
                 "Connection closed by Teensy"
             )
+
+        rate_meter.add_download(len(data))
+        rate_meter.update()
 
 
         receive_buffer += data.decode(
