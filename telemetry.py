@@ -129,6 +129,30 @@ def parse_telemetry(line):
             return None
 
     # ------------------------------------------------------------------------
+    # PID gains
+    # ------------------------------------------------------------------------
+    #
+    # Format:
+    # PID,time_ms,kp,ki,kd
+    #
+
+    if parts[0] == "PID":
+        if len(parts) != 5:
+            return None
+
+        try:
+            return {
+                "type": "PID",
+                "time_ms": int(parts[1]),
+                "kp": float(parts[2]),
+                "ki": float(parts[3]),
+                "kd": float(parts[4]),
+            }
+
+        except ValueError:
+            return None
+
+    # ------------------------------------------------------------------------
     # Heaters
     # ------------------------------------------------------------------------
     #

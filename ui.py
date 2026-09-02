@@ -12,6 +12,7 @@ ui.py
 Terminal user interface for the SHROOM Ground Station.
 """
 
+import math
 import queue
 import threading
 
@@ -146,6 +147,13 @@ class GroundStationApp(App):
                 yield Static(
                     "Controller output: --- %",
                     id="thermal_output"
+                )
+
+                yield Static(
+                    "Kp: ---\n"
+                    "Ki: ---\n"
+                    "Kd: ---",
+                    id="pid_gains"
                 )
 
                 yield Static(
@@ -381,6 +389,24 @@ class GroundStationApp(App):
             ).update(
                 f"Controller output: "
                 f"{telemetry['output_percent']:.1f} %"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
+        # PID gains
+        # --------------------------------------------------------------------
+
+        if telemetry_type == "PID":
+
+            self.query_one(
+                "#pid_gains",
+                Static
+            ).update(
+                f"Kp: {telemetry['kp']:.6g}\n"
+                f"Ki: {telemetry['ki']:.6g}\n"
+                f"Kd: {telemetry['kd']:.6g}"
             )
 
             return
@@ -660,6 +686,22 @@ class GroundStationApp(App):
             )
 
             self._write_log(
+                "  pid <Kp> <Ki> <Kd>"
+            )
+
+            self._write_log(
+                "  kp <value>"
+            )
+
+            self._write_log(
+                "  ki <value>"
+            )
+
+            self._write_log(
+                "  kd <value>"
+            )
+
+            self._write_log(
                 "  heater <1-4|all> <0-100>"
             )
 
@@ -733,6 +775,101 @@ class GroundStationApp(App):
 
             self.command_queue.put(
                 "CMD,THERMAL_OFF"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
+        # PID gains
+        # --------------------------------------------------------------------
+
+        if command_lower.startswith("pid "):
+            parts = command.split()
+
+            if len(parts) != 4:
+                self._write_log(
+                    "[GS] Usage: pid <Kp> <Ki> <Kd>"
+                )
+                return
+
+
+            try:
+                kp, ki, kd = (
+                    float(value) for value in parts[1:]
+                )
+
+            except ValueError:
+                self._write_log(
+                    "[GS] Invalid PID gains."
+                )
+                return
+
+
+            if any(
+                not math.isfinite(gain) or
+                gain < 0.0 or
+                gain > 1000.0
+                for gain in (kp, ki, kd)
+            ):
+                self._write_log(
+                    "[GS] PID gains must be between 0 and 1000."
+                )
+                return
+
+
+            self.command_queue.put(
+                f"CMD,SET_PID,{kp:.6g},{ki:.6g},{kd:.6g}"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
+        # Individual PID gain
+        # --------------------------------------------------------------------
+
+        command_parts = command.split()
+        gain_commands = {
+            "kp": "SET_KP",
+            "ki": "SET_KI",
+            "kd": "SET_KD",
+        }
+
+        if command_parts[0].lower() in gain_commands:
+            gain_name = command_parts[0].lower()
+
+            if len(command_parts) != 2:
+                self._write_log(
+                    f"[GS] Usage: {gain_name} <value>"
+                )
+                return
+
+
+            try:
+                gain_value = float(command_parts[1])
+
+            except ValueError:
+                self._write_log(
+                    f"[GS] Invalid {gain_name} value."
+                )
+                return
+
+
+            if (
+                not math.isfinite(gain_value) or
+                gain_value < 0.0 or
+                gain_value > 1000.0
+            ):
+                self._write_log(
+                    f"[GS] {gain_name} must be between 0 and 1000."
+                )
+                return
+
+
+            self.command_queue.put(
+                f"CMD,{gain_commands[gain_name]},"
+                f"{gain_value:.6g}"
             )
 
             return
