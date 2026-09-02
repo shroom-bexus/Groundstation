@@ -29,7 +29,6 @@ SHROOM_LOGO = r"""
         ╚════██║██╔══██║██╔══██╗██║   ██║██║   ██║██║╚██╔╝██║
         ███████║██║  ██║██║  ██║╚██████╔╝╚██████╔╝██║ ╚═╝ ██║
         ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝     ╚═╝
-
 Stratospheric High-Altitude Radiation Observation of Organismic Mycology
 """
 
@@ -49,7 +48,7 @@ class GroundStationApp(App):
     }
 
     #logo {
-        height: 7;
+        height: 8;
         content-align: center middle;
         text-style: bold;
     }
