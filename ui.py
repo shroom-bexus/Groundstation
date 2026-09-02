@@ -181,6 +181,16 @@ class GroundStationApp(App):
                     id="pads_pressure"
                 )
 
+                yield Static(
+                    "HIDS temperature: --- K",
+                    id="hids_temperature"
+                )
+
+                yield Static(
+                    "Relative humidity: --- %",
+                    id="hids_humidity"
+                )
+
 
             # ----------------------------------------------------------------
             # Health monitoring
@@ -193,11 +203,11 @@ class GroundStationApp(App):
                 )
 
                 yield Static(
-                    "SD: ---\n"
-                    "MAX31865: ---\n"
-                    "PADS: ---\n"
-                    "HIDS: ---\n"
-                    "AIRDOS: ---",
+                    "SD:        ---\n"
+                    "MAX31865:  ---\n"
+                    "PADS:      ---\n"
+                    "HIDS:      ---\n"
+                    "AIRDOS:    ---",
                     id="health_status"
                 )
 
@@ -422,6 +432,32 @@ class GroundStationApp(App):
 
 
         # --------------------------------------------------------------------
+        # WSEN-HIDS
+        # --------------------------------------------------------------------
+
+        if telemetry_type == "HIDS":
+
+            self.query_one(
+                "#hids_temperature",
+                Static
+            ).update(
+                f"HIDS temperature: "
+                f"{telemetry['temperature_k']:.3f} K"
+            )
+
+
+            self.query_one(
+                "#hids_humidity",
+                Static
+            ).update(
+                f"Relative humidity: "
+                f"{telemetry['humidity_percent']:.2f} %"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
         # Flight computer log
         # --------------------------------------------------------------------
 
@@ -620,11 +656,7 @@ class GroundStationApp(App):
             )
 
             self._write_log(
-                "  thermal on"
-            )
-
-            self._write_log(
-                "  thermal off"
+                "  thermal <on/off>"
             )
 
             self._write_log(

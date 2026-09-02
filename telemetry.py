@@ -81,6 +81,29 @@ def parse_telemetry(line):
             return None
 
     # ------------------------------------------------------------------------
+    # WSEN-HIDS
+    # ------------------------------------------------------------------------
+    #
+    # Format:
+    # HIDS,time_ms,temperature_K,humidity_percent
+    #
+
+    if parts[0] == "HIDS":
+        if len(parts) != 4:
+            return None
+
+        try:
+            return {
+                "type": "HIDS",
+                "time_ms": int(parts[1]),
+                "temperature_k": float(parts[2]),
+                "humidity_percent": float(parts[3]),
+            }
+
+        except ValueError:
+            return None
+
+    # ------------------------------------------------------------------------
     # Thermal control
     # ------------------------------------------------------------------------
     #
