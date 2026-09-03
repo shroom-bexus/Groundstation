@@ -7,31 +7,31 @@ import threading
 from pathlib import Path
 
 
-DEFAULT_UPLINK_LIMIT_KBIT_S = 0.0
+DEFAULT_UPLINK_LIMIT_KBIT_S = 1.0
 DEFAULT_DOWNLINK_LIMIT_KBIT_S = 0.0
-MIN_LIMIT_KBIT_S = 2.0
+MIN_UPLINK_LIMIT_KBIT_S = 1.0
+MIN_DOWNLINK_LIMIT_KBIT_S = 2.0
 MAX_LIMIT_KBIT_S = 10000.0
 
-# Conservative wire-size estimate: Ethernet, IP, TCP, preamble, and gap.
-PACKET_OVERHEAD_BYTES = 78
+# Conservative wire-size estimate: Ethernet, IP, UDP, preamble, and gap.
+PACKET_OVERHEAD_BYTES = 66
 MINIMUM_PACKET_BYTES = 84
-TOKEN_CAPACITY_SECONDS = 0.6
 
 
-def valid_limit(limit_kbit_s):
-    """Return whether a limit is unlimited (0) or inside the valid range."""
+def valid_limit(limit_kbit_s, minimum_kbit_s):
+    """Return whether a limit is unlimited (0) or inside its valid range."""
 
     return (
         math.isfinite(limit_kbit_s) and
         (
             limit_kbit_s == 0.0 or
-            MIN_LIMIT_KBIT_S <= limit_kbit_s <= MAX_LIMIT_KBIT_S
+            minimum_kbit_s <= limit_kbit_s <= MAX_LIMIT_KBIT_S
         )
     )
 
 
 def estimated_packet_bits(payload_bytes):
-    """Estimate the complete wire size of one TCP packet."""
+    """Estimate the complete wire size of one UDP datagram."""
 
     return max(
         payload_bytes + PACKET_OVERHEAD_BYTES,
@@ -70,7 +70,10 @@ class BandwidthSettings:
     def set_limits(self, uplink_limit, downlink_limit):
         """Validate, activate, and persist both limits."""
 
-        if not valid_limit(uplink_limit) or not valid_limit(downlink_limit):
+        if (
+            not valid_limit(uplink_limit, MIN_UPLINK_LIMIT_KBIT_S) or
+            not valid_limit(downlink_limit, MIN_DOWNLINK_LIMIT_KBIT_S)
+        ):
             return False
 
         with self._lock:
@@ -95,7 +98,10 @@ class BandwidthSettings:
         except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
             return
 
-        if valid_limit(uplink) and valid_limit(downlink):
+        if (
+            valid_limit(uplink, MIN_UPLINK_LIMIT_KBIT_S) and
+            valid_limit(downlink, MIN_DOWNLINK_LIMIT_KBIT_S)
+        ):
             self._uplink_limit = uplink
             self._downlink_limit = downlink
 

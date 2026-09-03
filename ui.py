@@ -23,7 +23,8 @@ from textual.widgets import Footer, Header, Input, RichLog, Static
 from bandwidth import (
     BandwidthSettings,
     MAX_LIMIT_KBIT_S,
-    MIN_LIMIT_KBIT_S,
+    MIN_DOWNLINK_LIMIT_KBIT_S,
+    MIN_UPLINK_LIMIT_KBIT_S,
     valid_limit,
 )
 from ethernet_link import ethernet_link_run
@@ -40,14 +41,14 @@ Stratospheric High-Altitude Radiation Observation of Organismic Mycology
 """
 
 
-def _parse_bandwidth_limit(text):
+def _parse_bandwidth_limit(text, minimum_kbit_s):
     """Parse kbit/s or the word 'unlimited' into a numeric limit."""
 
     if text.lower() == "unlimited":
         return 0.0
 
     value = float(text)
-    if not valid_limit(value):
+    if not valid_limit(value, minimum_kbit_s):
         raise ValueError
 
     return value
@@ -812,16 +813,31 @@ class GroundStationApp(App):
 
             try:
                 if bandwidth_command == "rates":
-                    uplink_limit = _parse_bandwidth_limit(command_parts[1])
-                    downlink_limit = _parse_bandwidth_limit(command_parts[2])
+                    uplink_limit = _parse_bandwidth_limit(
+                        command_parts[1],
+                        MIN_UPLINK_LIMIT_KBIT_S
+                    )
+                    downlink_limit = _parse_bandwidth_limit(
+                        command_parts[2],
+                        MIN_DOWNLINK_LIMIT_KBIT_S
+                    )
                 elif bandwidth_command == "upload":
-                    uplink_limit = _parse_bandwidth_limit(command_parts[1])
+                    uplink_limit = _parse_bandwidth_limit(
+                        command_parts[1],
+                        MIN_UPLINK_LIMIT_KBIT_S
+                    )
                 else:
-                    downlink_limit = _parse_bandwidth_limit(command_parts[1])
+                    downlink_limit = _parse_bandwidth_limit(
+                        command_parts[1],
+                        MIN_DOWNLINK_LIMIT_KBIT_S
+                    )
             except ValueError:
                 self._write_log(
-                    f"[GS] Rate must be {MIN_LIMIT_KBIT_S:.0f}..."
-                    f"{MAX_LIMIT_KBIT_S:.0f} kbit/s or unlimited."
+                    "[GS] Upload must be "
+                    f"{MIN_UPLINK_LIMIT_KBIT_S:.0f}...{MAX_LIMIT_KBIT_S:.0f}; "
+                    "download must be "
+                    f"{MIN_DOWNLINK_LIMIT_KBIT_S:.0f}...{MAX_LIMIT_KBIT_S:.0f} "
+                    "kbit/s, or unlimited."
                 )
                 return
 
@@ -844,7 +860,7 @@ class GroundStationApp(App):
 
             if self.connected:
                 self.command_queue.put(
-                    f"CMD,SET_DOWNLINK_LIMIT,{downlink_limit:.6g}"
+                    f"CMD,SET_DL_LIMIT,{downlink_limit:.6g}"
                 )
 
             self._write_log(
