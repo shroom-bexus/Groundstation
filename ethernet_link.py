@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from bandwidth import estimated_packet_bits
+from data_logger import GroundStationLogger
 from network_config import network_interface
 from telemetry import parse_telemetry
 
@@ -122,15 +123,27 @@ def _numbered_command(command_id, command):
     return f"CMD,{command_id},{command[4:]}"
 
 
-def _send_pending(client, pending, limiter, rate_meter):
+def _send_pending(client, pending, limiter, rate_meter, data_logger):
     limiter.wait_for(len(pending["payload"]))
     bytes_sent = client.send(pending["payload"])
     if bytes_sent != len(pending["payload"]):
         raise OSError("Incomplete UDP datagram")
 
     rate_meter.add_upload(bytes_sent)
+    if data_logger is not None:
+        data_logger.log_traffic("UPLINK", pending["payload"])
+
     pending["attempts"] += 1
     pending["sent_at"] = time.monotonic()
+
+    if data_logger is not None and pending["command_id"] is not None:
+        data_logger.log_command(
+            "SENT",
+            pending["command_id"],
+            pending["detail"],
+            pending["attempts"],
+            pending["internal"]
+        )
 
 
 def _reply(line):
@@ -178,6 +191,14 @@ def ethernet_link_run(
 
     on_connection(False)
 
+    try:
+        data_logger = GroundStationLogger()
+    except OSError as error:
+        data_logger = None
+        on_log(f"Data logging disabled: {error}")
+    else:
+        on_log(f"Data directory: {data_logger.session_directory}")
+
     while True:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
@@ -192,7 +213,8 @@ def ethernet_link_run(
                     on_connection,
                     on_rates,
                     on_telemetry,
-                    on_log
+                    on_log,
+                    data_logger
                 )
         except OSError as error:
             on_connection(False)
@@ -208,7 +230,8 @@ def _handle_udp(
     on_connection,
     on_rates,
     on_telemetry,
-    on_log
+    on_log,
+    data_logger
 ):
     limiter = _UplinkLimiter(bandwidth_settings)
     rate_meter = _RateMeter(on_rates)
@@ -232,8 +255,19 @@ def _handle_udp(
 
         if pending is not None and now - pending["sent_at"] >= ACK_TIMEOUT:
             if pending["attempts"] < MAX_SEND_ATTEMPTS:
-                _send_pending(client, pending, limiter, rate_meter)
+                _send_pending(
+                    client, pending, limiter, rate_meter, data_logger
+                )
             else:
+                if data_logger is not None and pending["command_id"] is not None:
+                    data_logger.log_command(
+                        "TIMEOUT",
+                        pending["command_id"],
+                        pending["detail"],
+                        pending["attempts"],
+                        pending["internal"]
+                    )
+
                 if not pending["internal"]:
                     on_log(
                         f"No response for command {pending['command_id']}"
@@ -285,7 +319,9 @@ def _handle_udp(
 
             if pending is not None and pending["attempts"] == 0:
                 try:
-                    _send_pending(client, pending, limiter, rate_meter)
+                    _send_pending(
+                        client, pending, limiter, rate_meter, data_logger
+                    )
                     if not pending["internal"]:
                         on_log(
                             f"Sent: CMD,{pending['command_id']},"
@@ -309,6 +345,8 @@ def _handle_udp(
             continue
 
         rate_meter.add_download(len(data))
+        if data_logger is not None:
+            data_logger.log_traffic("DOWNLINK", data)
         last_received = time.monotonic()
         if not connected:
             connected = True
@@ -329,6 +367,19 @@ def _handle_udp(
         response = _reply(lines[0])
         if response is not None:
             response_type, response_id, detail = response
+            if data_logger is not None:
+                response_internal = (
+                    pending["internal"]
+                    if pending is not None and
+                    response_id == pending["command_id"]
+                    else ""
+                )
+                data_logger.log_command(
+                    response_type,
+                    response_id,
+                    detail,
+                    internal=response_internal
+                )
             if pending is None or response_id != pending["command_id"]:
                 on_log(f"Late command response ignored: {lines[0]}")
                 continue
@@ -364,4 +415,6 @@ def _handle_udp(
             if telemetry is None:
                 on_log(f"Unknown message: {line}")
             else:
+                if data_logger is not None:
+                    data_logger.log_telemetry(telemetry, sequence)
                 on_telemetry(telemetry)
