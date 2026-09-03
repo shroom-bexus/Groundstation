@@ -48,6 +48,34 @@ def parse_telemetry(line):
 
 
     # ------------------------------------------------------------------------
+    # AIRDOS raw data
+    # ------------------------------------------------------------------------
+    #
+    # Format:
+    # AIRDOS,time_ms,sensor,raw_uart_message
+    #
+    # The raw UART message itself may contain commas, so only split the first
+    # three separators here.
+
+    if line.startswith("AIRDOS,"):
+        parts = line.split(",", 3)
+
+        if len(parts) != 4:
+            return None
+
+        try:
+            return {
+                "type": "AIRDOS",
+                "time_ms": int(parts[1]),
+                "sensor": int(parts[2]),
+                "data": parts[3],
+            }
+
+        except ValueError:
+            return None
+
+
+    # ------------------------------------------------------------------------
     # Split standard telemetry messages
     # ------------------------------------------------------------------------
 
@@ -188,7 +216,7 @@ def parse_telemetry(line):
     # HEALTH,time_ms,MAX31865,sensor,state,fault,error_count
     # HEALTH,time_ms,PADS,state,error_count
     # HEALTH,time_ms,HIDS,state,error_count
-    # HEALTH,time_ms,AIRDOS,state,last_message_age_ms,overflow_count
+    # HEALTH,time_ms,AIRDOS,sensor,state,last_message_age_ms,overflow_count
     #
 
     if parts[0] == "HEALTH":
@@ -229,16 +257,17 @@ def parse_telemetry(line):
 
             # AIRDOS
             if subsystem == "AIRDOS":
-                if len(parts) != 6:
+                if len(parts) != 7:
                     return None
 
                 return {
                     "type": "HEALTH",
                     "time_ms": time_ms,
                     "subsystem": subsystem,
-                    "state": parts[3],
-                    "last_message_age_ms": int(parts[4]),
-                    "overflow_count": int(parts[5]),
+                    "sensor": int(parts[3]),
+                    "state": parts[4],
+                    "last_message_age_ms": int(parts[5]),
+                    "overflow_count": int(parts[6]),
                 }
 
         except ValueError:

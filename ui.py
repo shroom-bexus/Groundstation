@@ -564,8 +564,8 @@ class GroundStationApp(App):
 
             subsystem = telemetry["subsystem"]
 
-            if subsystem == "MAX31865":
-                key = f"MAX31865_{telemetry['sensor']}"
+            if subsystem in ("MAX31865", "AIRDOS"):
+                key = f"{subsystem}_{telemetry['sensor']}"
             else:
                 key = subsystem
 
@@ -670,23 +670,30 @@ class GroundStationApp(App):
         # AIRDOS
         # --------------------------------------------------------------------
 
-        airdos = self.health.get("AIRDOS")
+        airdos_keys = sorted(
+            (
+                key for key in self.health
+                if key.startswith("AIRDOS_")
+            ),
+            key=lambda key: int(key.split("_", 1)[1])
+        )
 
-        if airdos:
-            age_ms = airdos["last_message_age_ms"]
+        if airdos_keys:
+            for key in airdos_keys:
+                airdos = self.health[key]
+                age_ms = airdos["last_message_age_ms"]
 
-            if age_ms == 0 and airdos["state"] != "OK":
-                age_text = "---"
-            else:
-                age_text = (
-                    f"{age_ms / 1000.0:.1f} s"
+                if age_ms == 0 and airdos["state"] != "OK":
+                    age_text = "---"
+                else:
+                    age_text = f"{age_ms / 1000.0:.1f} s"
+
+                lines.append(
+                    f"AIRDOS {airdos['sensor']}: "
+                    f"{airdos['state']}  "
+                    f"last: {age_text}  "
+                    f"overflows: {airdos['overflow_count']}"
                 )
-
-            lines.append(
-                f"AIRDOS: {airdos['state']}  "
-                f"last: {age_text}  "
-                f"overflows: {airdos['overflow_count']}"
-            )
 
         else:
             lines.append(

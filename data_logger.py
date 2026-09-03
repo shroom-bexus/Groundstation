@@ -270,6 +270,25 @@ class GroundStationLogger:
                     )
                 )
 
+            elif telemetry_type == "AIRDOS":
+                self._write_csv(
+                    "airdos.csv",
+                    (
+                        "received_utc",
+                        "sequence",
+                        "time_ms",
+                        "sensor",
+                        "data",
+                    ),
+                    (
+                        received_utc,
+                        sequence,
+                        telemetry["time_ms"],
+                        telemetry["sensor"],
+                        telemetry["data"],
+                    )
+                )
+
             elif telemetry_type == "HEALTH":
                 self._write_csv(
                     "health.csv",
