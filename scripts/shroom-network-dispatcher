@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+# NetworkManager calls this script whenever the dedicated Ethernet profile
+# changes state. The configuration file is installed by the setup script.
+
+set -u
+
+readonly CONFIG_PATH="/etc/shroom-groundstation/network.conf"
+readonly NFT_TABLE="shroom_filter"
+readonly CONNECTION_NAME="SHROOM"
+
+[[ -r "$CONFIG_PATH" ]] || exit 0
+
+# shellcheck source=/dev/null
+source "$CONFIG_PATH"
+
+readonly EVENT_INTERFACE="${1:-}"
+readonly EVENT_ACTION="${2:-}"
+
+[[ "$EVENT_INTERFACE" == "$SHROOM_INTERFACE" ]] || exit 0
+
+# Ignore other NetworkManager profiles that happen to use the same adapter.
+if [[ -n "${CONNECTION_ID:-}" && "$CONNECTION_ID" != "$CONNECTION_NAME" ]]; then
+    exit 0
+fi
+
+apply_shroom_rules() {
+    # Recreate our private table so repeated NetworkManager events are safe.
+    /usr/bin/nft delete table inet "$NFT_TABLE" >/dev/null 2>&1 || true
+    /usr/bin/nft add table inet "$NFT_TABLE"
+    /usr/bin/nft \
+        "add chain inet $NFT_TABLE output { type filter hook output priority 0; policy accept; }"
+    /usr/bin/nft add rule inet "$NFT_TABLE" output \
+        oifname "$SHROOM_INTERFACE" \
+        ip daddr 224.0.0.0/4 \
+        counter drop
+
+    # Avoid periodic ARP refresh packets on the bandwidth-limited uplink.
+    /usr/bin/ip neigh replace "$TEENSY_IP" \
+        lladdr "$TEENSY_MAC" \
+        nud permanent \
+        dev "$SHROOM_INTERFACE"
+}
+
+remove_shroom_rules() {
+    /usr/bin/ip neigh del "$TEENSY_IP" \
+        dev "$SHROOM_INTERFACE" >/dev/null 2>&1 || true
+    /usr/bin/nft delete table inet "$NFT_TABLE" >/dev/null 2>&1 || true
+}
+
+case "$EVENT_ACTION" in
+    up|dhcp4-change)
+        apply_shroom_rules
+        ;;
+    pre-down|down)
+        remove_shroom_rules
+        ;;
+esac
