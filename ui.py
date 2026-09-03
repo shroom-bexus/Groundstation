@@ -789,6 +789,15 @@ class GroundStationApp(App):
         bandwidth_command = command_parts[0].lower()
 
         if bandwidth_command in ("rates", "upload", "download"):
+            if bandwidth_command == "rates" and len(command_parts) == 1:
+                uplink_limit, downlink_limit = self.bandwidth.get_limits()
+                self._write_log(
+                    "[GS] Bandwidth limits: "
+                    f"upload {self._format_limit(uplink_limit)}, "
+                    f"download {self._format_limit(downlink_limit)} kbit/s"
+                )
+                return
+
             expected_parts = 3 if bandwidth_command == "rates" else 2
             if len(command_parts) != expected_parts:
                 usage = (

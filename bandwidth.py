@@ -12,6 +12,11 @@ DEFAULT_DOWNLINK_LIMIT_KBIT_S = 0.0
 MIN_LIMIT_KBIT_S = 2.0
 MAX_LIMIT_KBIT_S = 10000.0
 
+# Conservative wire-size estimate: Ethernet, IP, TCP, preamble, and gap.
+PACKET_OVERHEAD_BYTES = 78
+MINIMUM_PACKET_BYTES = 84
+TOKEN_CAPACITY_SECONDS = 0.6
+
 
 def valid_limit(limit_kbit_s):
     """Return whether a limit is unlimited (0) or inside the valid range."""
@@ -23,6 +28,15 @@ def valid_limit(limit_kbit_s):
             MIN_LIMIT_KBIT_S <= limit_kbit_s <= MAX_LIMIT_KBIT_S
         )
     )
+
+
+def estimated_packet_bits(payload_bytes):
+    """Estimate the complete wire size of one TCP packet."""
+
+    return max(
+        payload_bytes + PACKET_OVERHEAD_BYTES,
+        MINIMUM_PACKET_BYTES
+    ) * 8
 
 
 class BandwidthSettings:
