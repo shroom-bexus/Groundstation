@@ -6,12 +6,13 @@ import time
 from pathlib import Path
 
 from bandwidth import estimated_packet_bits
+from network_config import network_interface
 from telemetry import parse_telemetry
 
 
 TEENSY_IP = "172.16.18.131"
 TEENSY_PORT = 5000
-NETWORK_INTERFACE = "enp0s31f6"
+NETWORK_INTERFACE = network_interface()
 
 RECEIVE_TIMEOUT = 0.1
 ONLINE_TIMEOUT = 3.5
