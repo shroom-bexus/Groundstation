@@ -225,7 +225,16 @@ class GroundStationApp(App):
                 )
 
                 yield Static(
-                    "MAX31865: ---",
+                    "MAX31865:\n"
+                    "TEMP 1: ---\n"
+                    "TEMP 2: ---\n"
+                    "TEMP 3: ---\n"
+                    "TEMP 4: ---\n"
+                    "TEMP 5: ---\n"
+                    "TEMP 6: ---\n"
+                    "TEMP 7: ---\n"
+                    "TEMP 8: ---\n"
+                    "TEMP 9: ---",
                     id="max31865_temperatures"
                 )
 
@@ -557,11 +566,15 @@ class GroundStationApp(App):
             self.max31865_temperatures[sensor] = telemetry["temperature_k"]
 
             lines = ["MAX31865:"]
-            for sensor_id in sorted(self.max31865_temperatures):
-                temperature_k = self.max31865_temperatures[sensor_id]
-                lines.append(
-                    f"TEMP {sensor_id}: {temperature_k:.3f} K"
-                )
+            for sensor_id in range(1, 10):
+                temperature_k = self.max31865_temperatures.get(sensor_id)
+
+                if temperature_k is None:
+                    lines.append(f"TEMP {sensor_id}: ---")
+                else:
+                    lines.append(
+                        f"TEMP {sensor_id}: {temperature_k:.3f} K"
+                    )
 
             self.query_one(
                 "#max31865_temperatures",
