@@ -254,6 +254,7 @@ class GroundStationApp(App):
                     "MAX31865:  ---\n"
                     "PADS:      ---\n"
                     "HIDS:      ---\n"
+                    "ISDS:      ---\n"
                     "AIRDOS:    ---",
                     id="health_status"
                 )
@@ -720,6 +721,23 @@ class GroundStationApp(App):
         else:
             lines.append(
                 "HIDS: ---"
+            )
+
+
+        # --------------------------------------------------------------------
+        # WSEN-ISDS
+        # --------------------------------------------------------------------
+
+        isds = self.health.get("ISDS")
+
+        if isds:
+            lines.append(
+                f"ISDS: {isds['state']}  "
+                f"errors: {isds['error_count']}"
+            )
+        else:
+            lines.append(
+                "ISDS: ---"
             )
 
 

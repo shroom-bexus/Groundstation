@@ -270,6 +270,7 @@ def parse_telemetry(line):
     # HEALTH,time_ms,MAX31865,sensor,state,fault,error_count
     # HEALTH,time_ms,PADS,state,error_count
     # HEALTH,time_ms,HIDS,state,error_count
+    # HEALTH,time_ms,ISDS,state,error_count
     # HEALTH,time_ms,AIRDOS,sensor,state,last_message_age_ms,overflow_count
     #
 
@@ -281,8 +282,8 @@ def parse_telemetry(line):
             time_ms = int(parts[1])
             subsystem = parts[2]
 
-            # SD / PADS / HIDS
-            if subsystem in ("SD", "PADS", "HIDS"):
+            # SD / PADS / HIDS / ISDS
+            if subsystem in ("SD", "PADS", "HIDS", "ISDS"):
                 if len(parts) != 5:
                     return None
 
