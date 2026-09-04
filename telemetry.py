@@ -207,6 +207,36 @@ def parse_telemetry(line):
 
 
     # ------------------------------------------------------------------------
+    # Downlink limiter / AIRDOS priority state
+    # ------------------------------------------------------------------------
+    #
+    # Format:
+    # DOWNLINK,time_ms,limit_kbit_s,airdos_level,airdos_selected_count,
+    #          drop_count,suppressed_count,system_queue,airdos_queue
+    #
+
+    if parts[0] == "DOWNLINK":
+        if len(parts) != 9:
+            return None
+
+        try:
+            return {
+                "type": "DOWNLINK",
+                "time_ms": int(parts[1]),
+                "limit_kbit_s": float(parts[2]),
+                "airdos_level": int(parts[3]),
+                "airdos_selected_count": int(parts[4]),
+                "drop_count": int(parts[5]),
+                "suppressed_count": int(parts[6]),
+                "system_queue": int(parts[7]),
+                "airdos_queue": int(parts[8]),
+            }
+
+        except ValueError:
+            return None
+
+
+    # ------------------------------------------------------------------------
     # Health monitoring
     # ------------------------------------------------------------------------
     #

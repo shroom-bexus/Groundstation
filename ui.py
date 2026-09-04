@@ -120,6 +120,7 @@ class GroundStationApp(App):
         self.download_rate_kbit_s = 0.0
 
         self.health = {}
+        self.downlink_status = None
 
 
     # ========================================================================
@@ -557,6 +558,18 @@ class GroundStationApp(App):
 
 
         # --------------------------------------------------------------------
+        # Downlink limiter / AIRDOS priority
+        # --------------------------------------------------------------------
+
+        if telemetry_type == "DOWNLINK":
+
+            self.downlink_status = telemetry
+            self._update_health_panel()
+
+            return
+
+
+        # --------------------------------------------------------------------
         # Health monitoring
         # --------------------------------------------------------------------
 
@@ -698,6 +711,34 @@ class GroundStationApp(App):
         else:
             lines.append(
                 "AIRDOS: ---"
+            )
+
+
+        # --------------------------------------------------------------------
+        # Downlink limiter / AIRDOS priority
+        # --------------------------------------------------------------------
+
+        downlink = self.downlink_status
+
+        if downlink:
+            if downlink["limit_kbit_s"] == 0.0:
+                limit_text = "unlimited"
+            else:
+                limit_text = f"{downlink['limit_kbit_s']:.1f} kbit/s"
+
+            lines.append("")
+            lines.append(
+                f"FC downlink: {limit_text}  "
+                f"AIRDOS: {downlink['airdos_selected_count']}/9 "
+                f"(level {downlink['airdos_level']})"
+            )
+            lines.append(
+                f"TX drops: {downlink['drop_count']}  "
+                f"suppressed: {downlink['suppressed_count']}"
+            )
+            lines.append(
+                f"Queues: system {downlink['system_queue']}  "
+                f"AIRDOS {downlink['airdos_queue']}"
             )
 
 

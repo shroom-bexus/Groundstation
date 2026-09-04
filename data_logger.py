@@ -289,6 +289,35 @@ class GroundStationLogger:
                     )
                 )
 
+            elif telemetry_type == "DOWNLINK":
+                self._write_csv(
+                    "downlink.csv",
+                    (
+                        "received_utc",
+                        "sequence",
+                        "time_ms",
+                        "limit_kbit_s",
+                        "airdos_level",
+                        "airdos_selected_count",
+                        "drop_count",
+                        "suppressed_count",
+                        "system_queue",
+                        "airdos_queue",
+                    ),
+                    (
+                        received_utc,
+                        sequence,
+                        telemetry["time_ms"],
+                        telemetry["limit_kbit_s"],
+                        telemetry["airdos_level"],
+                        telemetry["airdos_selected_count"],
+                        telemetry["drop_count"],
+                        telemetry["suppressed_count"],
+                        telemetry["system_queue"],
+                        telemetry["airdos_queue"],
+                    )
+                )
+
             elif telemetry_type == "HEALTH":
                 self._write_csv(
                     "health.csv",
