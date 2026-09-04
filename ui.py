@@ -121,6 +121,7 @@ class GroundStationApp(App):
 
         self.health = {}
         self.downlink_status = None
+        self.max31865_temperatures = {}
 
 
     # ========================================================================
@@ -221,6 +222,11 @@ class GroundStationApp(App):
                 yield Static(
                     "Relative humidity: --- %",
                     id="hids_humidity"
+                )
+
+                yield Static(
+                    "MAX31865: ---",
+                    id="max31865_temperatures"
                 )
 
 
@@ -537,6 +543,31 @@ class GroundStationApp(App):
             ).update(
                 f"Relative humidity: "
                 f"{telemetry['humidity_percent']:.2f} %"
+            )
+
+            return
+
+
+        # --------------------------------------------------------------------
+        # MAX31865 / PT1000 temperatures
+        # --------------------------------------------------------------------
+
+        if telemetry_type == "MAX31865":
+            sensor = telemetry["sensor"]
+            self.max31865_temperatures[sensor] = telemetry["temperature_k"]
+
+            lines = ["MAX31865:"]
+            for sensor_id in sorted(self.max31865_temperatures):
+                temperature_k = self.max31865_temperatures[sensor_id]
+                lines.append(
+                    f"TEMP {sensor_id}: {temperature_k:.3f} K"
+                )
+
+            self.query_one(
+                "#max31865_temperatures",
+                Static
+            ).update(
+                "\n".join(lines)
             )
 
             return

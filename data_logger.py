@@ -170,7 +170,26 @@ class GroundStationLogger:
         with self._lock:
             self._write_json_line(self._telemetry_file, json_record)
 
-            if telemetry_type == "PADS":
+            if telemetry_type == "MAX31865":
+                self._write_csv(
+                    "max31865.csv",
+                    (
+                        "received_utc",
+                        "sequence",
+                        "time_ms",
+                        "sensor",
+                        "temperature_K",
+                    ),
+                    (
+                        received_utc,
+                        sequence,
+                        telemetry["time_ms"],
+                        telemetry["sensor"],
+                        telemetry["temperature_k"],
+                    )
+                )
+
+            elif telemetry_type == "PADS":
                 self._write_csv(
                     "wsen_pads.csv",
                     (

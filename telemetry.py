@@ -86,6 +86,30 @@ def parse_telemetry(line):
 
 
     # ------------------------------------------------------------------------
+    # MAX31865 / PT1000
+    # ------------------------------------------------------------------------
+    #
+    # Format:
+    # MAX31865,time_ms,sensor,temperature_K
+    #
+
+    if parts[0] == "MAX31865":
+        if len(parts) != 4:
+            return None
+
+        try:
+            return {
+                "type": "MAX31865",
+                "time_ms": int(parts[1]),
+                "sensor": int(parts[2]),
+                "temperature_k": float(parts[3]),
+            }
+
+        except ValueError:
+            return None
+
+
+    # ------------------------------------------------------------------------
     # WSEN-PADS
     # ------------------------------------------------------------------------
     #
