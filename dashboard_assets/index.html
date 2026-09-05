@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SHROOM Ground Station</title>
+  <meta name="description" content="SHROOM BEXUS live telemetry dashboard">
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">S</div>
+      <div>
+        <div class="brand-name">SHROOM</div>
+        <div class="brand-subtitle">BEXUS GROUND STATION</div>
+      </div>
+    </div>
+    <div class="topbar-center">
+      <span id="connection-pill" class="status-pill offline">
+        <span class="status-dot"></span><span id="connection-text">OFFLINE</span>
+      </span>
+      <span class="top-metric">MISSION <strong id="mission-time">00:00:00</strong></span>
+      <span class="top-metric">LAST DATA <strong id="last-update">—</strong></span>
+    </div>
+    <label class="window-control">
+      WINDOW
+      <select id="time-window">
+        <option value="120">2 min</option>
+        <option value="300" selected>5 min</option>
+        <option value="900">15 min</option>
+      </select>
+    </label>
+  </header>
+
+  <main>
+    <section class="metrics" aria-label="Current mission values">
+      <article class="metric-card accent-cyan">
+        <div class="metric-label">THERMAL MASS</div>
+        <div><span id="thermal-temperature" class="metric-value">—</span><span class="unit"> K</span></div>
+        <div id="thermal-target" class="metric-detail">Target — K</div>
+      </article>
+      <article class="metric-card accent-blue">
+        <div class="metric-label">PRESSURE</div>
+        <div><span id="pressure-value" class="metric-value">—</span><span class="unit"> hPa</span></div>
+        <div id="pads-temperature" class="metric-detail">PADS — K</div>
+      </article>
+      <article class="metric-card accent-violet">
+        <div class="metric-label">HUMIDITY</div>
+        <div><span id="humidity-value" class="metric-value">—</span><span class="unit"> %RH</span></div>
+        <div id="hids-temperature" class="metric-detail">HIDS — K</div>
+      </article>
+      <article class="metric-card accent-orange">
+        <div class="metric-label">HEATER OUTPUT</div>
+        <div><span id="heater-output" class="metric-value">—</span><span class="unit"> %</span></div>
+        <div id="pid-state" class="metric-detail">PID —</div>
+      </article>
+      <article class="metric-card accent-green">
+        <div class="metric-label">DOWNLINK</div>
+        <div><span id="downlink-rate" class="metric-value">—</span><span class="unit"> kbit/s</span></div>
+        <div id="downlink-limit" class="metric-detail">Limit —</div>
+      </article>
+    </section>
+
+    <section class="dashboard-grid">
+      <div class="main-column">
+        <article class="panel temperature-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">THERMAL OVERVIEW</p>
+              <h2>Temperature channels</h2>
+            </div>
+            <div id="temperature-legend" class="legend"></div>
+          </div>
+          <canvas id="temperature-chart" class="chart" aria-label="Temperature time series"></canvas>
+        </article>
+
+        <div class="two-column">
+          <article class="panel">
+            <div class="panel-heading compact">
+              <div><p class="eyebrow">ENVIRONMENT</p><h2>Pressure</h2></div>
+              <span id="pressure-delta" class="panel-value">—</span>
+            </div>
+            <canvas id="pressure-chart" class="chart chart-small" aria-label="Pressure time series"></canvas>
+          </article>
+          <article class="panel">
+            <div class="panel-heading compact">
+              <div><p class="eyebrow">THERMAL CONTROL</p><h2>Controller output</h2></div>
+              <span id="heater-mode" class="panel-value">—</span>
+            </div>
+            <canvas id="output-chart" class="chart chart-small" aria-label="Heater output time series"></canvas>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-heading compact">
+            <div><p class="eyebrow">COMMUNICATION</p><h2>Link load</h2></div>
+            <span id="link-summary" class="panel-value">—</span>
+          </div>
+          <canvas id="link-chart" class="chart chart-small" aria-label="Uplink and downlink rate time series"></canvas>
+        </article>
+      </div>
+
+      <aside class="side-column">
+        <article class="panel health-panel">
+          <div class="panel-heading compact">
+            <div><p class="eyebrow">FLIGHT COMPUTER</p><h2>System health</h2></div>
+            <span id="health-summary" class="panel-value">Waiting</span>
+          </div>
+          <div id="health-list" class="health-list empty-state">No health telemetry received</div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading compact">
+            <div><p class="eyebrow">RADIATION PAYLOAD</p><h2>AIRDOS</h2></div>
+            <span id="airdos-selection" class="panel-value">— / 9</span>
+          </div>
+          <div id="airdos-list" class="airdos-list empty-state">No AIRDOS data received</div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading compact">
+            <div><p class="eyebrow">DOWNLINK BUFFER</p><h2>Queues</h2></div>
+            <span id="queue-level" class="panel-value">—</span>
+          </div>
+          <div class="queue-grid">
+            <div><span>SYSTEM</span><strong id="system-queue">—</strong></div>
+            <div><span>AIRDOS</span><strong id="airdos-queue">—</strong></div>
+            <div><span>DROPS</span><strong id="drop-count">—</strong></div>
+            <div><span>SUPPRESSED</span><strong id="suppressed-count">—</strong></div>
+          </div>
+        </article>
+
+        <article class="panel log-panel">
+          <div class="panel-heading compact">
+            <div><p class="eyebrow">EVENT STREAM</p><h2>Recent messages</h2></div>
+          </div>
+          <div id="log-list" class="log-list empty-state">No messages yet</div>
+        </article>
+      </aside>
+    </section>
+  </main>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
