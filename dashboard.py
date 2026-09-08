@@ -155,6 +155,9 @@ class DashboardState:
                         time_s,
                     )
 
+            elif telemetry_type == "THERMAL_CONFIG":
+                self._latest["thermal_config"] = telemetry
+
             elif telemetry_type == "PID":
                 self._latest["pid"] = telemetry
 
@@ -413,3 +416,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

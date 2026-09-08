@@ -26,7 +26,7 @@ const LABELS = {
   pads_temperature: "PADS",
   hids_temperature: "HIDS",
   pressure: "Pressure",
-  thermal_output: "PID output",
+  thermal_output: "Controller output",
   downlink: "Downlink",
   uplink: "Uplink",
 };
@@ -195,6 +195,7 @@ function updateState(state) {
   lastState = state;
   const latest = state.latest || {};
   const thermal = latest.thermal || {};
+  const regulator = latest.thermal_config?.mode || "Control";
   const pads = latest.pads || {};
   const hids = latest.hids || {};
   const downlink = latest.downlink || {};
@@ -212,11 +213,11 @@ function updateState(state) {
   element("humidity-value").textContent = valueOrDash(hids.humidity_percent, 1);
   element("hids-temperature").textContent = `HIDS ${valueOrDash(hids.temperature_k, 2)} K`;
   element("heater-output").textContent = valueOrDash(thermal.output_percent, 1);
-  element("pid-state").textContent = `PID ${thermal.controller_enabled === true ? "ON" : thermal.controller_enabled === false ? "OFF" : "—"}`;
+  element("pid-state").textContent = `${regulator} ${thermal.controller_enabled === true ? "ON" : thermal.controller_enabled === false ? "OFF" : "—"}`;
   element("downlink-rate").textContent = valueOrDash(state.rates.download_kbit_s, 1);
   const dlLimit = state.rates.download_limit_kbit_s === 0 ? "unlimited" : `${valueOrDash(state.rates.download_limit_kbit_s, 1)} kbit/s`;
   element("downlink-limit").textContent = `Limit ${dlLimit}`;
-  element("heater-mode").textContent = thermal.controller_enabled ? `PID · ${valueOrDash(thermal.output_percent, 1)}%` : "Manual / off";
+  element("heater-mode").textContent = thermal.controller_enabled ? `${regulator} · ${valueOrDash(thermal.output_percent, 1)}%` : "Manual / off";
   element("pressure-delta").textContent = `${valueOrDash(Number(pads.pressure_pa) / 100, 1)} hPa`;
   element("link-summary").textContent = `↑ ${valueOrDash(state.rates.upload_kbit_s, 2)} · ↓ ${valueOrDash(state.rates.download_kbit_s, 2)} kbit/s`;
 
@@ -265,3 +266,4 @@ window.addEventListener("resize", () => {
 
 refresh();
 setInterval(refresh, 1000);
+

@@ -155,7 +155,7 @@ class GroundStationApp(App):
                 )
 
                 yield Static(
-                    "PID: ---",
+                    "Control: ---",
                     id="thermal_enabled"
                 )
 
@@ -173,6 +173,8 @@ class GroundStationApp(App):
                     "Controller output: --- %",
                     id="thermal_output"
                 )
+
+                yield Static("Regulator: ---", id="thermal_config")
 
                 yield Static(
                     "Kp: ---\n"
@@ -436,7 +438,7 @@ class GroundStationApp(App):
                 "#thermal_enabled",
                 Static
             ).update(
-                f"PID: {enabled_state}"
+                f"Control: {enabled_state}"
             )
 
 
@@ -472,6 +474,14 @@ class GroundStationApp(App):
         # --------------------------------------------------------------------
         # PID gains
         # --------------------------------------------------------------------
+
+        if telemetry_type == "THERMAL_CONFIG":
+            self.query_one("#thermal_config", Static).update(
+                f"Regulator: {telemetry['mode']}\n"
+                f"Hysteresis: ±{telemetry['hysteresis_k']:.6g} K\n"
+                f"BB ON power: {telemetry['bang_bang_power_percent']:.6g} %"
+            )
+            return
 
         if telemetry_type == "PID":
 
@@ -850,8 +860,11 @@ class GroundStationApp(App):
             )
 
             self._write_log(
-                "  thermal <on/off>"
+                "  thermal <on/off/pid/bangbang>"
             )
+
+            self._write_log("  hysteresis <K> (half-width, 0 < K <= 10)")
+            self._write_log("  bbpower <percent> (0..100)")
 
             self._write_log(
                 "  pid <Kp> <Ki> <Kd>"
@@ -1030,6 +1043,27 @@ class GroundStationApp(App):
         # --------------------------------------------------------------------
         # Thermal controller
         # --------------------------------------------------------------------
+
+        if command_lower in ("thermal pid", "thermal bangbang"):
+            mode = "PID" if command_lower == "thermal pid" else "BANG_BANG"
+            self.command_queue.put(f"CMD,SET_THERMAL_MODE,{mode}")
+            return
+
+        if command_lower.split()[0] in ("hysteresis", "bbpower"):
+            parts = command_lower.split()
+            try:
+                if len(parts) != 2:
+                    raise ValueError
+                value = float(parts[1])
+                valid = (0 < value <= 10) if parts[0] == "hysteresis" else (0 <= value <= 100)
+                if not math.isfinite(value) or not valid:
+                    raise ValueError
+            except ValueError:
+                self._write_log("[GS] Usage: hysteresis <K: >0..10> or bbpower <percent: 0..100>")
+                return
+            name = "SET_HYSTERESIS" if parts[0] == "hysteresis" else "SET_BB_POWER"
+            self.command_queue.put(f"CMD,{name},{value:.6g}")
+            return
 
         if command_lower == "thermal on":
 
@@ -1240,3 +1274,4 @@ class GroundStationApp(App):
         self._write_log(
             f"[GS] Unknown command: {command}"
         )
+
