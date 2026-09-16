@@ -47,6 +47,9 @@ function escapeHtml(value) {
 function valueOrDash(value, digits = 1) {
   return Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : "—";
 }
+function celsius(kelvin) {
+  return typeof kelvin === "number" && Number.isFinite(kelvin) ? kelvin - 273.15 : NaN;
+}
 function formatDuration(seconds) {
   const total = Math.max(0, Math.floor(seconds || 0));
   const hours = Math.floor(total / 3600);
@@ -155,16 +158,16 @@ function updateLegend(names) {
 function updateHealth(health) {
   const entries = Object.entries(health || {}).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
   if (!entries.length) return;
-  const faults = entries.filter(([, item]) => !["OK", "VALID"].includes(item.state)).length;
+  const faults = entries.filter(([, item]) => !["OK", "VALID", "DISABLED"].includes(item.state)).length;
   element("health-summary").textContent = faults ? `${faults} attention` : "All nominal";
   element("health-summary").style.color = faults ? "#ff667a" : "#5cdf9a";
   element("health-list").classList.remove("empty-state");
   element("health-list").innerHTML = entries.map(([key, item]) => {
-    const fault = !["OK", "VALID"].includes(item.state);
+    const fault = !["OK", "VALID", "DISABLED"].includes(item.state);
     let detail = `errors ${item.error_count ?? 0}`;
     if (item.last_message_age_ms !== undefined) detail = `last ${(item.last_message_age_ms / 1000).toFixed(1)} s · overflows ${item.overflow_count}`;
     if (item.fault !== undefined) detail = `fault ${item.fault} · errors ${item.error_count}`;
-    return `<div class="health-item"><div class="health-name"><span>${escapeHtml(key.replace("_", " "))}</span><span class="state ${fault ? "fault" : ""}">${escapeHtml(item.state)}</span></div><div class="health-detail">${escapeHtml(detail)}</div></div>`;
+    return `<div class="health-item"><div class="health-name"><span>${escapeHtml(({SD_INTERNAL: "Primary internal SD", SD_BACKUP: "Primary backup XTSD", SD_SECONDARY_INTERNAL: "Secondary internal SD", SD_SECONDARY_BACKUP: "Secondary backup XTSD"}[key] || key.replaceAll("_", " ")))}</span><span class="state ${fault ? "fault" : ""}">${escapeHtml(item.state)}</span></div><div class="health-detail">${escapeHtml(detail)}</div></div>`;
   }).join("");
 }
 
@@ -188,6 +191,7 @@ function updateLogs(logs) {
     <div class="log-line"><span class="log-time">${formatDuration(item.time_s)}</span><span class="log-message"></span></div>`).join("");
   [...element("log-list").querySelectorAll(".log-message")].forEach((node, index) => {
     node.textContent = recent[index].message;
+    node.classList.toggle("log-error", recent[index].message.includes("[ERROR]"));
   });
 }
 
@@ -206,12 +210,12 @@ function updateState(state) {
   element("mission-time").textContent = formatDuration(state.elapsed_s);
   element("last-update").textContent = new Date().toLocaleTimeString([], { hour12: false });
 
-  element("thermal-temperature").textContent = valueOrDash(thermal.temperature_k, 2);
-  element("thermal-target").textContent = `Target ${valueOrDash(thermal.target_k, 2)} K`;
+  element("thermal-temperature").textContent = valueOrDash(celsius(thermal.temperature_k), 2);
+  element("thermal-target").textContent = `Target ${valueOrDash(celsius(thermal.target_k), 2)} °C`;
   element("pressure-value").textContent = valueOrDash(Number(pads.pressure_pa) / 100, 1);
-  element("pads-temperature").textContent = `PADS ${valueOrDash(pads.temperature_k, 2)} K`;
+  element("pads-temperature").textContent = `PADS ${valueOrDash(celsius(pads.temperature_k), 2)} °C`;
   element("humidity-value").textContent = valueOrDash(hids.humidity_percent, 1);
-  element("hids-temperature").textContent = `HIDS ${valueOrDash(hids.temperature_k, 2)} K`;
+  element("hids-temperature").textContent = `HIDS ${valueOrDash(celsius(hids.temperature_k), 2)} °C`;
   element("heater-output").textContent = valueOrDash(thermal.output_percent, 1);
   element("pid-state").textContent = `${regulator} ${thermal.controller_enabled === true ? "ON" : thermal.controller_enabled === false ? "OFF" : "—"}`;
   element("downlink-rate").textContent = valueOrDash(state.rates.download_kbit_s, 1);
@@ -240,7 +244,7 @@ function updateState(state) {
   }
   updateLegend(temperatureNames);
   const visibleTemperatureNames = temperatureNames.filter(name => !hiddenTemperatureSeries.has(name));
-  drawChart(element("temperature-chart"), Object.fromEntries(visibleTemperatureNames.map(name => [name, state.series[name] || []])), { formatY: value => value.toFixed(1) });
+  drawChart(element("temperature-chart"), Object.fromEntries(visibleTemperatureNames.map(name => [name, (state.series[name] || []).map(([time, kelvin]) => [time, celsius(kelvin)])])), { formatY: value => `${value.toFixed(1)} °C` });
   drawChart(element("pressure-chart"), { pressure: state.series.pressure || [] }, { formatY: value => (value / 100).toFixed(0) });
   drawChart(element("output-chart"), { thermal_output: state.series.thermal_output || [] }, { yMin: 0, yMax: 100, formatY: value => `${value.toFixed(0)}%` });
   drawChart(element("link-chart"), { uplink: state.series.uplink || [], downlink: state.series.downlink || [] }, { yMin: 0, formatY: value => value.toFixed(1) });

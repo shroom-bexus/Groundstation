@@ -184,3 +184,5 @@ main { max-width: 1800px; margin: 0 auto; padding: 20px 24px 36px; }
   .legend { max-width: 100%; justify-content: flex-start; }
   .panel-heading { flex-direction: column; }
 }
+
+.log-error { color: #ff667a; font-weight: 700; }

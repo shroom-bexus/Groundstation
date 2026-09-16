@@ -28,6 +28,8 @@ from bandwidth import (
     valid_limit,
 )
 from ethernet_link import ethernet_link_run
+from display import celsius, target_kelvin, STORAGE_LABELS, storage_notice
+from rich.text import Text
 
 
 SHROOM_LOGO = r"""
@@ -87,6 +89,7 @@ class GroundStationApp(App):
 
     .panel {
         width: 1fr;
+        overflow-y: auto;
         padding: 1 2;
         border: solid white;
     }
@@ -160,12 +163,12 @@ class GroundStationApp(App):
                 )
 
                 yield Static(
-                    "Temperature: --- K",
+                    "Temperature: --- °C",
                     id="thermal_temperature"
                 )
 
                 yield Static(
-                    "Target: --- K",
+                    "Target: --- °C",
                     id="thermal_target"
                 )
 
@@ -207,7 +210,7 @@ class GroundStationApp(App):
                 )
 
                 yield Static(
-                    "PADS temperature: --- K",
+                    "PADS temperature: --- °C",
                     id="pads_temperature"
                 )
 
@@ -217,7 +220,7 @@ class GroundStationApp(App):
                 )
 
                 yield Static(
-                    "HIDS temperature: --- K",
+                    "HIDS temperature: --- °C",
                     id="hids_temperature"
                 )
 
@@ -252,7 +255,10 @@ class GroundStationApp(App):
                 )
 
                 yield Static(
-                    "SD:        ---\n"
+                    "Primary internal SD: WAITING\n"
+                    "Primary backup XTSD: WAITING\n"
+                    "Secondary internal SD: WAITING\n"
+                    "Secondary backup XTSD: WAITING\n"
                     "MAX31865:  ---\n"
                     "PADS:      ---\n"
                     "HIDS:      ---\n"
@@ -411,7 +417,7 @@ class GroundStationApp(App):
             "#log",
             RichLog
         ).write(
-            message
+            Text(message, style="bold red") if "[ERROR]" in message else message
         )
 
 
@@ -447,7 +453,7 @@ class GroundStationApp(App):
                 Static
             ).update(
                 f"Temperature: "
-                f"{telemetry['temperature_k']:.3f} K"
+                f"{celsius(telemetry['temperature_k']):.3f} °C"
             )
 
 
@@ -456,7 +462,7 @@ class GroundStationApp(App):
                 Static
             ).update(
                 f"Target: "
-                f"{telemetry['target_k']:.2f} K"
+                f"{celsius(telemetry['target_k']):.2f} °C"
             )
 
 
@@ -478,7 +484,7 @@ class GroundStationApp(App):
         if telemetry_type == "THERMAL_CONFIG":
             self.query_one("#thermal_config", Static).update(
                 f"Regulator: {telemetry['mode']}\n"
-                f"Hysteresis: ±{telemetry['hysteresis_k']:.6g} K\n"
+                f"Hysteresis: ±{telemetry['hysteresis_k']:.6g} °C\n"
                 f"BB ON power: {telemetry['bang_bang_power_percent']:.6g} %"
             )
             return
@@ -527,7 +533,7 @@ class GroundStationApp(App):
                 Static
             ).update(
                 f"PADS temperature: "
-                f"{telemetry['temperature_k']:.3f} K"
+                f"{celsius(telemetry['temperature_k']):.3f} °C"
             )
 
 
@@ -553,7 +559,7 @@ class GroundStationApp(App):
                 Static
             ).update(
                 f"HIDS temperature: "
-                f"{telemetry['temperature_k']:.3f} K"
+                f"{celsius(telemetry['temperature_k']):.3f} °C"
             )
 
 
@@ -584,7 +590,7 @@ class GroundStationApp(App):
                     lines.append(f"TEMP {sensor_id}: ---")
                 else:
                     lines.append(
-                        f"TEMP {sensor_id}: {temperature_k:.3f} K"
+                        f"TEMP {sensor_id}: {celsius(temperature_k):.3f} °C"
                     )
 
             self.query_one(
@@ -637,6 +643,9 @@ class GroundStationApp(App):
             else:
                 key = subsystem
 
+            notice = storage_notice(self.health.get(key), telemetry)
+            if notice:
+                self._write_log(notice)
             self.health[key] = telemetry
 
             self._update_health_panel()
@@ -660,17 +669,16 @@ class GroundStationApp(App):
         # SD card
         # --------------------------------------------------------------------
 
-        sd = self.health.get("SD")
-
-        if sd:
+        for key, label in STORAGE_LABELS.items():
+            sd = self.health.get(key)
             lines.append(
-                f"SD: {sd['state']}  "
-                f"errors: {sd['error_count']}"
+                f"{label}: {sd['state']}  errors: {sd['error_count']}"
+                if sd else f"{label}: WAITING"
             )
-        else:
-            lines.append(
-                "SD: ---"
-            )
+        # Older firmware only supplies the aggregate SD status.
+        if "SD" in self.health and "SD_INTERNAL" not in self.health:
+            sd = self.health["SD"]
+            lines.append(f"SD (legacy combined): {sd['state']}  errors: {sd['error_count']}")
 
 
         # --------------------------------------------------------------------
@@ -856,14 +864,14 @@ class GroundStationApp(App):
             )
 
             self._write_log(
-                "  target <K>"
+                "  target <°C>"
             )
 
             self._write_log(
                 "  thermal <on/off/pid/bangbang>"
             )
 
-            self._write_log("  hysteresis <K> (half-width, 0 < K <= 10)")
+            self._write_log("  hysteresis <°C> (half-width, 0 < °C <= 10)")
             self._write_log("  bbpower <percent> (0..100)")
 
             self._write_log(
@@ -1016,13 +1024,13 @@ class GroundStationApp(App):
 
             if len(parts) != 2:
                 self._write_log(
-                    "[GS] Usage: target <K>"
+                    "[GS] Usage: target <°C>"
                 )
                 return
 
 
             try:
-                target_k = float(
+                target_k = target_kelvin(
                     parts[1]
                 )
 
@@ -1059,7 +1067,7 @@ class GroundStationApp(App):
                 if not math.isfinite(value) or not valid:
                     raise ValueError
             except ValueError:
-                self._write_log("[GS] Usage: hysteresis <K: >0..10> or bbpower <percent: 0..100>")
+                self._write_log("[GS] Usage: hysteresis <°C: >0..10> or bbpower <percent: 0..100>")
                 return
             name = "SET_HYSTERESIS" if parts[0] == "hysteresis" else "SET_BB_POWER"
             self.command_queue.put(f"CMD,{name},{value:.6g}")

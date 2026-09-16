@@ -22,6 +22,7 @@ from pathlib import Path
 
 from bandwidth import BandwidthSettings
 from ethernet_link import ethernet_link_run
+from display import storage_notice
 
 
 ASSET_DIRECTORY = Path(__file__).with_name("dashboard_assets")
@@ -170,6 +171,9 @@ class DashboardState:
                     key = f"{subsystem}_{telemetry['sensor']}"
                 else:
                     key = subsystem
+                notice = storage_notice(self._health.get(key), telemetry)
+                if notice:
+                    self._logs.append({"time_s": round(self._elapsed_s(), 1), "message": notice})
                 self._health[key] = telemetry
 
             elif telemetry_type == "AIRDOS":
