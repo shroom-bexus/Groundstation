@@ -29,7 +29,7 @@ def main():
                             "-I"+str(flight/"include"),
                             str(flight/f"test/binary/{name}.cpp"), "-o", str(tmp/name)], check=True)
         # Numerical boundaries, empty fields and preservation of formatting.
-        extra = ["X,0,239,240,4294967295,4294967296,00,-0,-1,1.00,,", "X,"+"a"*380, "", ","]
+        extra = ["X,0,239,240,4294967295,4294967296,00,-0,-1,1.00,,", "X,"+"a"*1100, "", ","]
         encoded = subprocess.run([str(tmp/"codec")], input="\n".join(lines+extra)+"\n",
                                  text=True, capture_output=True, check=True).stdout.splitlines()
         packets = [bytes.fromhex(s) for s in encoded]
@@ -50,14 +50,25 @@ def main():
         received = collections.Counter()
         ages = []
         previous = None
+        recent = collections.deque()
+        recent_bits = 0
+        burst_limit_bits = int(120000 * 0.2)
         for row in result.stdout.splitlines():
             time, hex_data = row.split()
             time = int(time)
             data = bytes.fromhex(hex_data)
             if previous is not None:
                 last_time, last_data = previous
+                assert time-last_time >= 50000, "regular telemetry sent faster than 50 ms slots"
                 assert time-last_time >= math.ceil(max(len(last_data)+66,84)*8*1e6/120000)
             previous = time, data
+            while recent and time - recent[0][0] >= 200000:
+                _, expired_bits = recent.popleft()
+                recent_bits -= expired_bits
+            packet_bits = max(len(data)+66,84)*8
+            assert recent_bits + packet_bits <= burst_limit_bits, "200 ms burst limit exceeded"
+            recent.append((time, packet_bits))
+            recent_bits += packet_bits
             for line in decode_datagram(data)[1:]:
                 if line.startswith("AIRDOS,"):
                     received[line] += 1
