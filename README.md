@@ -118,3 +118,15 @@ immediately invalidates received values; reconnect requires new measurements.
 Healthy status messages do not refresh the sample timer. Timing is based on
 GS reception and does not measure network queue latency. Raw logged values and
 historical plots are retained. No thermal-control behavior is changed.
+
+### Primary RTC telemetry
+
+The primary sends `RTC,time_ms,valid,timestamp_utc` every 5 seconds with health
+telemetry, through the existing bandwidth-limited system queue. For example:
+`RTC,12345,1,2026-09-21T12:34:56Z`. An unsynchronized clock sends
+`RTC,12345,0,`. UTC uses the same TimeLib/hardware RTC source as SD timestamps;
+validity confirms synchronization, not accuracy against an external clock.
+The terminal and browser dashboard show the last received sample in UTC and
+its reception age (not transport latency), with STALE after 15 seconds or
+while disconnected. No PC-clock substitution or RTC-setting command is used.
+Update both firmware and GS; older firmware leaves the display waiting.

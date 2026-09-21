@@ -212,6 +212,10 @@ function updateState(state) {
     const age = item.age_s === null ? "" : ` · last sample ${Math.floor(item.age_s)} s ago`;
     return `${name}: ${temperatureText(item)} °C${item.state === "OK" ? "" : age}`;
   }).join(" | ");
+  const rtc = latest.rtc;
+  const rtcAge = state.rtc_age_s;
+  element("rtc-time").textContent = !rtc ? "waiting for data" :
+    `${rtc.valid ? rtc.timestamp_utc : "INVALID / not synchronized"} (last sample, received ${Math.floor(rtcAge)} s ago)${!state.connected || rtcAge > 15 ? " — STALE" : ""}`;
   const thermal = latest.thermal || {};
   const regulator = latest.thermal_config?.mode || "Control";
   const pads = latest.pads || {};
@@ -277,6 +281,7 @@ async function refresh() {
     element("thermal-temperature").textContent = "STALE";
     element("pads-temperature").textContent = "PADS STALE";
     element("hids-temperature").textContent = "HIDS STALE";
+    element("rtc-time").textContent = "STALE — dashboard connection lost";
   }
 }
 
