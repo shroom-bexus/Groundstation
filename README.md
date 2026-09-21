@@ -25,3 +25,74 @@ are additionally written to `commands.csv`.
 
 The `data/` directory is ignored by Git and can therefore be copied or archived
 without affecting the repository.
+
+
+## Selectable thermal regulator
+
+Use the updated Groundstation terminal commands:
+
+```text
+thermal off
+hysteresis 0.5
+bbpower 30
+thermal bangbang
+thermal on
+```
+
+This example selects bang-bang with thresholds at target ±0.5 °C and 30% ON
+power. Choose ON power for your heater supply; the fresh-setting default is
+100%, subject to existing heater limits. PID remains the initial regulator.
+Use `thermal pid` to switch back. `pid <Kp> <Ki> <Kd>` only changes gains;
+it does not select PID. `thermal on/off` enables/disables the selected regulator.
+
+Bang-bang turns ON at or below target minus hysteresis, OFF at or above target
+plus hysteresis, and retains its state inside that band. Hysteresis is a
+half-width (>0..10 °C); ON power accepts 0..100%. Both regulators use the same
+sensor, target, output limits and overtemperature cutoff. The cutoff always
+wins, even if the upper hysteresis threshold is above it. There is no automatic
+fallback. Missing/invalid/non-finite sensor readings switch heating off.
+
+Switching an enabled regulator clears its history and immediately turns heating
+off until the next valid sample. Bang-bang starts OFF inside the band, including
+after a reboot or sensor recovery. Changes to its target, hysteresis or power
+also restart it OFF. Selecting a regulator while thermal control is OFF does
+not enable it or change saved manual outputs.
+
+Regulator selection, hysteresis and ON power survive resets. EEPROM version-2
+PID gains, target, enabled state and manual settings are preserved on upgrade.
+PID gains remain available when switching back from bang-bang.
+
+The flight computer sends `THERMAL_CONFIG,time_ms,mode,hysteresis_K,on_power_percent`
+every health interval (5 s). The GS displays the reported configuration and logs
+it in `thermal_config.csv`; the dashboard labels the selected regulator.
+Existing THERMAL/PID messages remain unchanged. Update both repositories for
+command and display support. New settings may take up to a health interval to
+appear, plus any downlink queue delay.
+
+Validation: host-side regression tests exercise the real controller source with
+simulated EEPROM, sensor and heater interfaces. Hardware timing, PWM and thermal
+response still require a Teensy bench test before use.
+
+## Temperature units and storage health
+
+The terminal GS and browser dashboard show temperatures and target values in
+**°C**, including PT1000, PADS, HIDS and temperature plots. `target 25` now
+means **25 °C** and sends `CMD,SET_TARGET,298.15` to the flight computer.
+`hysteresis 0.5` means a ±0.5 °C half-width (numerically identical to 0.5 K).
+Raw protocol messages and CSV temperature columns remain in Kelvin.
+
+Storage health lists four independent devices: Primary internal SD, Primary
+backup XTSD, Secondary internal SD, and Secondary backup XTSD. Each has its
+own error count. FAULT and STALE transitions produce highlighted ERROR entries
+in the console/dashboard log, including failures already present at connection.
+Identical repeated reports do not spam the console; state/counter changes do.
+Health reports are also saved in `health.csv`.
+
+Update both Teensys to receive all four statuses. The Secondary sends storage
+status every five seconds over its UART link. The Primary reports WAITING
+before the first status and STALE after more than 15 seconds without one;
+STALE indicates missing status, not a confirmed card failure. Counters belong
+to each board's current boot, and may return to zero after a reset. DISABLED
+means that storage was disabled in the firmware configuration. Old aggregate
+`SD` messages remain readable for compatibility. If the GS itself is offline,
+health values are the last received values; check the connection indicator.

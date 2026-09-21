@@ -188,6 +188,19 @@ def parse_telemetry(line):
     # PID,time_ms,kp,ki,kd
     #
 
+    if parts[0] == "THERMAL_CONFIG":
+        if len(parts) != 5 or parts[2] not in ("PID", "BANG_BANG"):
+            return None
+        try:
+            hysteresis, power = float(parts[3]), float(parts[4])
+            if not (0 < hysteresis <= 10 and 0 <= power <= 100):
+                return None
+            return {"type": "THERMAL_CONFIG", "time_ms": int(parts[1]),
+                    "mode": parts[2], "hysteresis_k": hysteresis,
+                    "bang_bang_power_percent": power}
+        except ValueError:
+            return None
+
     if parts[0] == "PID":
         if len(parts) != 5:
             return None
@@ -283,7 +296,9 @@ def parse_telemetry(line):
             subsystem = parts[2]
 
             # SD / PADS / HIDS / ISDS
-            if subsystem in ("SD", "PADS", "HIDS", "ISDS"):
+            if subsystem in ("SD", "SD_INTERNAL", "SD_BACKUP",
+                             "SD_SECONDARY_INTERNAL", "SD_SECONDARY_BACKUP",
+                             "PADS", "HIDS", "ISDS"):
                 if len(parts) != 5:
                     return None
 
@@ -335,3 +350,4 @@ def parse_telemetry(line):
     # ------------------------------------------------------------------------
 
     return None
+
