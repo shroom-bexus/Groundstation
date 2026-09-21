@@ -130,3 +130,10 @@ The terminal and browser dashboard show the last received sample in UTC and
 its reception age (not transport latency), with STALE after 15 seconds or
 while disconnected. No PC-clock substitution or RTC-setting command is used.
 Update both firmware and GS; older firmware leaves the display waiting.
+
+### Binary telemetry
+
+This version accepts both SHB1 binary telemetry and legacy text telemetry. Install
+it before flashing the matching binary Flight Software. The UI and decoded logs
+keep their existing formats; raw SHB1 traffic is logged losslessly as hex.
+See [protocol and replay results](BINARY_TELEMETRY.md).
