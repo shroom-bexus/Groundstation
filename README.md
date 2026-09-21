@@ -96,3 +96,25 @@ to each board's current boot, and may return to zero after a reset. DISABLED
 means that storage was disabled in the firmware configuration. Old aggregate
 `SD` messages remain readable for compatibility. If the GS itself is offline,
 health values are the last received values; check the connection indicator.
+
+
+### Secondary link and temperature freshness
+
+The primary reports `HEALTH,time_ms,SECONDARY,state,error_count` every five
+seconds. `WAITING` allows 15 seconds after link initialization. Any valid UART
+AIRDOS, storage, or overflow-status frame proves the secondary is active;
+15 seconds without one gives `FAULT`. The existing periodic secondary status
+frames keep this independent of AIRDOS measurement traffic. Recovery is
+automatic. The counter reports UART parsing errors, not disconnect count.
+The GS logs fault/recovery transitions and shows a permanent secondary state.
+A lost primary/GS connection makes this status STALE, not proof that the
+secondary itself has failed. Older firmware without this report shows UNKNOWN.
+
+Terminal and browser temperature displays track each PT1000, PADS, HIDS and
+thermal-control temperature independently. At 10 seconds without a received
+sample they show STALE and the last sample age. Sensor FAULT or non-finite
+temperature shows INVALID; never-received channels show WAITING. Disconnection
+immediately invalidates received values; reconnect requires new measurements.
+Healthy status messages do not refresh the sample timer. Timing is based on
+GS reception and does not measure network queue latency. Raw logged values and
+historical plots are retained. No thermal-control behavior is changed.

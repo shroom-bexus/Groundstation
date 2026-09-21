@@ -70,6 +70,7 @@ class DisplayStorageTests(unittest.TestCase):
 
     def test_ui_temperature_and_storage_messages(self):
         app = GroundStationApp()
+        app.connected = True
         widgets = {}
         app.query_one = lambda key, kind: widgets.setdefault(key, Mock())
         app._write_log = Mock()

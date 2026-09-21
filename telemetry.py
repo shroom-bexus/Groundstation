@@ -298,7 +298,7 @@ def parse_telemetry(line):
             # SD / PADS / HIDS / ISDS
             if subsystem in ("SD", "SD_INTERNAL", "SD_BACKUP",
                              "SD_SECONDARY_INTERNAL", "SD_SECONDARY_BACKUP",
-                             "PADS", "HIDS", "ISDS"):
+                             "PADS", "HIDS", "ISDS", "SECONDARY"):
                 if len(parts) != 5:
                     return None
 

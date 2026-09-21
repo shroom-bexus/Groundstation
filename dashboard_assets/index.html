@@ -20,6 +20,7 @@
       <span id="connection-pill" class="status-pill offline">
         <span class="status-dot"></span><span id="connection-text">OFFLINE</span>
       </span>
+      <span class="top-metric">SECONDARY <strong id="secondary-state">UNKNOWN</strong></span>
       <span class="top-metric">MISSION <strong id="mission-time">00:00:00</strong></span>
       <span class="top-metric">LAST DATA <strong id="last-update">—</strong></span>
     </div>
@@ -72,6 +73,7 @@
             </div>
             <div id="temperature-legend" class="legend"></div>
           </div>
+          <div id="temperature-status" aria-live="polite"></div>
           <canvas id="temperature-chart" class="chart" aria-label="Temperature time series"></canvas>
         </article>
 
