@@ -195,9 +195,27 @@ function updateLogs(logs) {
   });
 }
 
+function temperatureText(item, digits = 2) {
+  if (!item) return "— WAITING";
+  const value = item.temperature_k === null ? "—" : valueOrDash(celsius(item.temperature_k), digits);
+  return item.state === "OK" ? value : `${value} [${item.state}]`;
+}
+
 function updateState(state) {
   lastState = state;
   const latest = state.latest || {};
+  const temperatures = state.temperatures || {};
+  element("secondary-state").textContent = state.secondary_state || "UNKNOWN";
+  element("secondary-state").style.color = state.secondary_state === "OK" ? "#5cdf9a" : "#ff667a";
+  element("temperature-status").textContent = Object.entries(temperatures).map(([key, item]) => {
+    const name = key.replace("MAX31865_", "TEMP ");
+    const age = item.age_s === null ? "" : ` · last sample ${Math.floor(item.age_s)} s ago`;
+    return `${name}: ${temperatureText(item)} °C${item.state === "OK" ? "" : age}`;
+  }).join(" | ");
+  const rtc = latest.rtc;
+  const rtcAge = state.rtc_age_s;
+  element("rtc-time").textContent = !rtc ? "waiting for data" :
+    `${rtc.valid ? rtc.timestamp_utc : "INVALID / not synchronized"} (last sample, received ${Math.floor(rtcAge)} s ago)${!state.connected || rtcAge > 15 ? " — STALE" : ""}`;
   const thermal = latest.thermal || {};
   const regulator = latest.thermal_config?.mode || "Control";
   const pads = latest.pads || {};
@@ -210,12 +228,12 @@ function updateState(state) {
   element("mission-time").textContent = formatDuration(state.elapsed_s);
   element("last-update").textContent = new Date().toLocaleTimeString([], { hour12: false });
 
-  element("thermal-temperature").textContent = valueOrDash(celsius(thermal.temperature_k), 2);
+  element("thermal-temperature").textContent = temperatureText(temperatures.THERMAL);
   element("thermal-target").textContent = `Target ${valueOrDash(celsius(thermal.target_k), 2)} °C`;
   element("pressure-value").textContent = valueOrDash(Number(pads.pressure_pa) / 100, 1);
-  element("pads-temperature").textContent = `PADS ${valueOrDash(celsius(pads.temperature_k), 2)} °C`;
+  element("pads-temperature").textContent = `PADS ${temperatureText(temperatures.PADS)} °C`;
   element("humidity-value").textContent = valueOrDash(hids.humidity_percent, 1);
-  element("hids-temperature").textContent = `HIDS ${valueOrDash(celsius(hids.temperature_k), 2)} °C`;
+  element("hids-temperature").textContent = `HIDS ${temperatureText(temperatures.HIDS)} °C`;
   element("heater-output").textContent = valueOrDash(thermal.output_percent, 1);
   element("pid-state").textContent = `${regulator} ${thermal.controller_enabled === true ? "ON" : thermal.controller_enabled === false ? "OFF" : "—"}`;
   element("downlink-rate").textContent = valueOrDash(state.rates.download_kbit_s, 1);
@@ -258,6 +276,12 @@ async function refresh() {
   } catch (error) {
     element("connection-pill").classList.remove("online");
     element("connection-text").textContent = "DASHBOARD LOST";
+    element("secondary-state").textContent = "STALE — dashboard connection lost";
+    element("temperature-status").textContent = "STALE — dashboard connection lost; plotted values are historical";
+    element("thermal-temperature").textContent = "STALE";
+    element("pads-temperature").textContent = "PADS STALE";
+    element("hids-temperature").textContent = "HIDS STALE";
+    element("rtc-time").textContent = "STALE — dashboard connection lost";
   }
 }
 

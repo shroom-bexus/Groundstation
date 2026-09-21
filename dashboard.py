@@ -23,6 +23,7 @@ from pathlib import Path
 from bandwidth import BandwidthSettings
 from ethernet_link import ethernet_link_run
 from display import storage_notice
+from freshness import Freshness
 
 
 ASSET_DIRECTORY = Path(__file__).with_name("dashboard_assets")
@@ -41,7 +42,9 @@ class DashboardState:
         self._download_kbit_s = 0.0
         self._last_fc_time_s = None
         self._latest = {}
+        self._rtc_received_at = None
         self._health = {}
+        self._freshness = Freshness()
         self._series = {}
         self._airdos_counts = {}
         self._logs = deque(maxlen=80)
@@ -65,6 +68,7 @@ class DashboardState:
         with self._lock:
             self._connected = bool(connected)
             if not connected:
+                self._freshness.invalidate()
                 self._upload_kbit_s = 0.0
                 self._download_kbit_s = 0.0
             self._revision += 1
@@ -91,6 +95,7 @@ class DashboardState:
         time_s = None if time_ms is None else time_ms / 1000.0
 
         with self._lock:
+            self._freshness.observe(telemetry)
             if time_s is not None:
                 if (
                     self._last_fc_time_s is not None
@@ -114,7 +119,11 @@ class DashboardState:
                 ):
                     self._last_fc_time_s = time_s
 
-            if telemetry_type == "THERMAL":
+            if telemetry_type == "RTC":
+                self._latest["rtc"] = dict(telemetry)
+                self._rtc_received_at = time.monotonic()
+
+            elif telemetry_type == "THERMAL":
                 self._latest["thermal"] = telemetry
                 self._append(
                     "thermal_temperature",
@@ -198,6 +207,10 @@ class DashboardState:
         with self._lock:
             uplink_limit, downlink_limit = bandwidth.get_limits()
             return {
+                "temperatures": self._freshness.temperatures(self._connected),
+                "secondary_state": self._freshness.secondary_state(self._connected),
+                "rtc_age_s": (None if self._rtc_received_at is None else
+                              round(time.monotonic() - self._rtc_received_at, 1)),
                 "revision": self._revision,
                 "elapsed_s": round(self._elapsed_s(), 1),
                 "connected": self._connected,

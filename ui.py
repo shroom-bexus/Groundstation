@@ -15,6 +15,7 @@ Terminal user interface for the SHROOM Ground Station.
 import math
 import queue
 import threading
+import time
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -29,6 +30,7 @@ from bandwidth import (
 )
 from ethernet_link import ethernet_link_run
 from display import celsius, target_kelvin, STORAGE_LABELS, storage_notice
+from freshness import Freshness
 from rich.text import Text
 
 
@@ -122,6 +124,9 @@ class GroundStationApp(App):
         self.upload_rate_kbit_s = 0.0
         self.download_rate_kbit_s = 0.0
 
+        self.freshness = Freshness()
+        self.rtc = None
+        self.rtc_received_at = None
         self.health = {}
         self.downlink_status = None
         self.max31865_temperatures = {}
@@ -144,6 +149,8 @@ class GroundStationApp(App):
             id="connection"
         )
 
+
+        yield Static("Primary RTC (UTC): waiting for data", id="rtc")
 
         with Horizontal(id="data_area"):
 
@@ -313,6 +320,8 @@ class GroundStationApp(App):
         )
 
         ethernet_thread.start()
+        self.set_interval(1.0, self._update_live_validity)
+        self.set_interval(1.0, self._update_rtc_panel)
 
 
     # ========================================================================
@@ -370,11 +379,24 @@ class GroundStationApp(App):
         self.connected = connected
 
         if not connected:
+            self.freshness.invalidate()
             self.upload_rate_kbit_s = 0.0
             self.download_rate_kbit_s = 0.0
 
         self._update_connection_panel()
+        self._update_live_validity()
 
+
+    def _update_rtc_panel(self):
+        if self.rtc is None:
+            text = "waiting for data"
+        else:
+            text = self.rtc["timestamp_utc"] if self.rtc["valid"] else "INVALID / not synchronized"
+            age = time.monotonic() - self.rtc_received_at
+            text += f" (last sample, received {age:.0f} s ago)"
+            if not self.connected or age > 15:
+                text += " — STALE"
+        self.query_one("#rtc", Static).update(f"Primary RTC (UTC): {text}")
 
     def _set_rates(self, upload_kbit_s, download_kbit_s):
         self.upload_rate_kbit_s = upload_kbit_s
@@ -427,6 +449,13 @@ class GroundStationApp(App):
 
     def _handle_telemetry(self, telemetry):
         telemetry_type = telemetry["type"]
+        self.freshness.observe(telemetry)
+
+        if telemetry_type == "RTC":
+            self.rtc = telemetry
+            self.rtc_received_at = time.monotonic()
+            self._update_rtc_panel()
+            return
 
 
         # --------------------------------------------------------------------
@@ -452,8 +481,7 @@ class GroundStationApp(App):
                 "#thermal_temperature",
                 Static
             ).update(
-                f"Temperature: "
-                f"{celsius(telemetry['temperature_k']):.3f} °C"
+                f"Temperature: {self.freshness.label('THERMAL', self.connected)}"
             )
 
 
@@ -532,8 +560,7 @@ class GroundStationApp(App):
                 "#pads_temperature",
                 Static
             ).update(
-                f"PADS temperature: "
-                f"{celsius(telemetry['temperature_k']):.3f} °C"
+                f"PADS temperature: {self.freshness.label('PADS', self.connected)}"
             )
 
 
@@ -558,8 +585,7 @@ class GroundStationApp(App):
                 "#hids_temperature",
                 Static
             ).update(
-                f"HIDS temperature: "
-                f"{celsius(telemetry['temperature_k']):.3f} °C"
+                f"HIDS temperature: {self.freshness.label('HIDS', self.connected)}"
             )
 
 
@@ -582,23 +608,7 @@ class GroundStationApp(App):
             sensor = telemetry["sensor"]
             self.max31865_temperatures[sensor] = telemetry["temperature_k"]
 
-            lines = ["MAX31865:"]
-            for sensor_id in range(1, 10):
-                temperature_k = self.max31865_temperatures.get(sensor_id)
-
-                if temperature_k is None:
-                    lines.append(f"TEMP {sensor_id}: ---")
-                else:
-                    lines.append(
-                        f"TEMP {sensor_id}: {celsius(temperature_k):.3f} °C"
-                    )
-
-            self.query_one(
-                "#max31865_temperatures",
-                Static
-            ).update(
-                "\n".join(lines)
-            )
+            self._update_temperature_panel()
 
             return
 
@@ -647,6 +657,7 @@ class GroundStationApp(App):
             if notice:
                 self._write_log(notice)
             self.health[key] = telemetry
+            self._update_temperature_panel()
 
             self._update_health_panel()
 
@@ -657,12 +668,30 @@ class GroundStationApp(App):
     # Health monitoring
     # ========================================================================
 
+    def _update_temperature_panel(self):
+        for key, widget, label in (
+            ('THERMAL', '#thermal_temperature', 'Temperature'),
+            ('PADS', '#pads_temperature', 'PADS temperature'),
+            ('HIDS', '#hids_temperature', 'HIDS temperature'),
+        ):
+            self.query_one(widget, Static).update(
+                f"{label}: {self.freshness.label(key, self.connected)}")
+        lines = ['MAX31865:'] + [
+            f"TEMP {sensor}: {self.freshness.label(f'MAX31865_{sensor}', self.connected)}"
+            for sensor in range(1, 10)
+        ]
+        self.query_one('#max31865_temperatures', Static).update('\n'.join(lines))
+
+    def _update_live_validity(self):
+        self._update_temperature_panel()
+        self._update_health_panel()
+
     def _update_health_panel(self):
         """
         Update the permanent health overview.
         """
 
-        lines = []
+        lines = [f"Secondary Teensy link: {self.freshness.secondary_state(self.connected)}"]
 
 
         # --------------------------------------------------------------------

@@ -22,7 +22,8 @@ def target_kelvin(value):
 
 def storage_notice(previous, current):
     """Report first faults, state changes and changed counters, without spam."""
-    label = STORAGE_LABELS.get(current["subsystem"])
+    label = ("Secondary Teensy link" if current["subsystem"] == "SECONDARY"
+             else STORAGE_LABELS.get(current["subsystem"]))
     if label is None:
         return None
     state, count = current["state"], current["error_count"]

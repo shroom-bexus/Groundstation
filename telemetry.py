@@ -13,6 +13,8 @@ Parsing of telemetry messages received from the SHROOM flight computer.
 """
 
 
+from datetime import datetime
+
 # ============================================================================
 # Telemetry parser
 # ============================================================================
@@ -78,6 +80,27 @@ def parse_telemetry(line):
     # ------------------------------------------------------------------------
     # Split standard telemetry messages
     # ------------------------------------------------------------------------
+
+    # RTC,time_ms,valid,YYYY-MM-DDTHH:MM:SSZ (empty timestamp if invalid).
+    if line.startswith("RTC,"):
+        parts = line.strip().split(",")
+        if len(parts) != 4 or parts[2] not in ("0", "1"):
+            return None
+        try:
+            time_ms = int(parts[1])
+            if not 0 <= time_ms <= 0xFFFFFFFF:
+                return None
+            valid = parts[2] == "1"
+            if valid:
+                parsed = datetime.strptime(parts[3], "%Y-%m-%dT%H:%M:%SZ")
+                if parsed.strftime("%Y-%m-%dT%H:%M:%SZ") != parts[3]:
+                    return None
+            elif parts[3]:
+                return None
+            return {"type": "RTC", "time_ms": time_ms, "valid": valid,
+                    "timestamp_utc": parts[3] if valid else None}
+        except ValueError:
+            return None
 
     parts = line.split(",")
 
@@ -298,7 +321,7 @@ def parse_telemetry(line):
             # SD / PADS / HIDS / ISDS
             if subsystem in ("SD", "SD_INTERNAL", "SD_BACKUP",
                              "SD_SECONDARY_INTERNAL", "SD_SECONDARY_BACKUP",
-                             "PADS", "HIDS", "ISDS"):
+                             "PADS", "HIDS", "ISDS", "SECONDARY"):
                 if len(parts) != 5:
                     return None
 
