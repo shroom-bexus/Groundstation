@@ -394,7 +394,7 @@ class GroundStationApp(App):
             text = self.rtc["timestamp_utc"] if self.rtc["valid"] else "INVALID / not synchronized"
             age = time.monotonic() - self.rtc_received_at
             text += f" (last sample, received {age:.0f} s ago)"
-            if not self.connected or age > 15:
+            if not self.connected or age > 75:
                 text += " — STALE"
         self.query_one("#rtc", Static).update(f"Primary RTC (UTC): {text}")
 
