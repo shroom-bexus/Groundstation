@@ -198,6 +198,10 @@ function updateLogs(logs) {
 function updateState(state) {
   lastState = state;
   const latest = state.latest || {};
+  const rtc = latest.rtc;
+  const rtcAge = state.rtc_age_s;
+  element("rtc-time").textContent = !rtc ? "waiting for data" :
+    `${rtc.valid ? rtc.timestamp_utc : "INVALID / not synchronized"} (last sample, received ${Math.floor(rtcAge)} s ago)${!state.connected || rtcAge > 15 ? " — STALE" : ""}`;
   const thermal = latest.thermal || {};
   const regulator = latest.thermal_config?.mode || "Control";
   const pads = latest.pads || {};
@@ -258,6 +262,7 @@ async function refresh() {
   } catch (error) {
     element("connection-pill").classList.remove("online");
     element("connection-text").textContent = "DASHBOARD LOST";
+    element("rtc-time").textContent = "STALE — dashboard connection lost";
   }
 }
 

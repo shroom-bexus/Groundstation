@@ -96,3 +96,16 @@ to each board's current boot, and may return to zero after a reset. DISABLED
 means that storage was disabled in the firmware configuration. Old aggregate
 `SD` messages remain readable for compatibility. If the GS itself is offline,
 health values are the last received values; check the connection indicator.
+
+
+### Primary RTC telemetry
+
+The primary sends `RTC,time_ms,valid,timestamp_utc` every 5 seconds with health
+telemetry, through the existing bandwidth-limited system queue. For example:
+`RTC,12345,1,2026-09-21T12:34:56Z`. An unsynchronized clock sends
+`RTC,12345,0,`. UTC uses the same TimeLib/hardware RTC source as SD timestamps;
+validity confirms synchronization, not accuracy against an external clock.
+The terminal and browser dashboard show the last received sample in UTC and
+its reception age (not transport latency), with STALE after 15 seconds or
+while disconnected. No PC-clock substitution or RTC-setting command is used.
+Update both firmware and GS; older firmware leaves the display waiting.

@@ -15,6 +15,7 @@ Terminal user interface for the SHROOM Ground Station.
 import math
 import queue
 import threading
+import time
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -122,6 +123,8 @@ class GroundStationApp(App):
         self.upload_rate_kbit_s = 0.0
         self.download_rate_kbit_s = 0.0
 
+        self.rtc = None
+        self.rtc_received_at = None
         self.health = {}
         self.downlink_status = None
         self.max31865_temperatures = {}
@@ -144,6 +147,8 @@ class GroundStationApp(App):
             id="connection"
         )
 
+
+        yield Static("Primary RTC (UTC): waiting for data", id="rtc")
 
         with Horizontal(id="data_area"):
 
@@ -313,6 +318,7 @@ class GroundStationApp(App):
         )
 
         ethernet_thread.start()
+        self.set_interval(1.0, self._update_rtc_panel)
 
 
     # ========================================================================
@@ -376,6 +382,17 @@ class GroundStationApp(App):
         self._update_connection_panel()
 
 
+    def _update_rtc_panel(self):
+        if self.rtc is None:
+            text = "waiting for data"
+        else:
+            text = self.rtc["timestamp_utc"] if self.rtc["valid"] else "INVALID / not synchronized"
+            age = time.monotonic() - self.rtc_received_at
+            text += f" (last sample, received {age:.0f} s ago)"
+            if not self.connected or age > 15:
+                text += " — STALE"
+        self.query_one("#rtc", Static).update(f"Primary RTC (UTC): {text}")
+
     def _set_rates(self, upload_kbit_s, download_kbit_s):
         self.upload_rate_kbit_s = upload_kbit_s
         self.download_rate_kbit_s = download_kbit_s
@@ -427,6 +444,12 @@ class GroundStationApp(App):
 
     def _handle_telemetry(self, telemetry):
         telemetry_type = telemetry["type"]
+
+        if telemetry_type == "RTC":
+            self.rtc = telemetry
+            self.rtc_received_at = time.monotonic()
+            self._update_rtc_panel()
+            return
 
 
         # --------------------------------------------------------------------

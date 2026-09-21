@@ -41,6 +41,7 @@ class DashboardState:
         self._download_kbit_s = 0.0
         self._last_fc_time_s = None
         self._latest = {}
+        self._rtc_received_at = None
         self._health = {}
         self._series = {}
         self._airdos_counts = {}
@@ -114,7 +115,11 @@ class DashboardState:
                 ):
                     self._last_fc_time_s = time_s
 
-            if telemetry_type == "THERMAL":
+            if telemetry_type == "RTC":
+                self._latest["rtc"] = dict(telemetry)
+                self._rtc_received_at = time.monotonic()
+
+            elif telemetry_type == "THERMAL":
                 self._latest["thermal"] = telemetry
                 self._append(
                     "thermal_temperature",
@@ -198,6 +203,8 @@ class DashboardState:
         with self._lock:
             uplink_limit, downlink_limit = bandwidth.get_limits()
             return {
+                "rtc_age_s": (None if self._rtc_received_at is None else
+                              round(time.monotonic() - self._rtc_received_at, 1)),
                 "revision": self._revision,
                 "elapsed_s": round(self._elapsed_s(), 1),
                 "connected": self._connected,
