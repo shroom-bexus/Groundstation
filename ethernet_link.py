@@ -9,6 +9,7 @@ from bandwidth import estimated_packet_bits
 from data_logger import GroundStationLogger
 from network_config import network_interface
 from telemetry import parse_telemetry
+from binary_telemetry import decode_datagram
 
 
 TEENSY_IP = "172.16.18.131"
@@ -353,7 +354,11 @@ def _handle_udp(
             on_connection(True)
             next_registration = last_received + REGISTRATION_INTERVAL
 
-        lines = data.decode("utf-8", errors="replace").splitlines()
+        try:
+            lines = decode_datagram(data)
+        except ValueError as error:
+            on_log(f"Invalid binary telemetry: {error}")
+            continue
         if not lines:
             continue
 

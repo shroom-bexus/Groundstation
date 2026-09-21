@@ -112,6 +112,10 @@ class GroundStationLogger:
             "data": text,
         }
 
+        if isinstance(payload, bytes) and payload.startswith(b"SHB"):
+            record["data"] = payload.hex()
+            record["encoding"] = "hex"
+
         with self._lock:
             self._write_json_line(self._traffic_file, record)
 

@@ -3,7 +3,7 @@ import math
 import time
 
 TEMPERATURE_TIMEOUT_S = 10.0
-HEALTH_TIMEOUT_S = 15.0
+HEALTH_TIMEOUT_S = 75.0
 TEMPERATURE_KEYS = ('THERMAL', 'PADS', 'HIDS') + tuple(
     f'MAX31865_{sensor}' for sensor in range(1, 10)
 )
