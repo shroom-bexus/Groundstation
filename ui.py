@@ -34,7 +34,15 @@ from freshness import Freshness
 from rich.text import Text
 
 
-SHROOM_BANNER = "SHROOM  •  BEXUS GROUND STATION"
+SHROOM_BANNER = """
+        ███████╗██╗  ██╗██████╗  ██████╗  ██████╗ ███╗   ███╗
+        ██╔════╝██║  ██║██╔══██╗██╔═══██╗██╔═══██╗████╗ ████║
+        ███████╗███████║██████╔╝██║   ██║██║   ██║██╔████╔██║
+        ╚════██║██╔══██║██╔══██╗██║   ██║██║   ██║██║╚██╔╝██║
+        ███████║██║  ██║██║  ██║╚██████╔╝╚██████╔╝██║ ╚═╝ ██║
+        ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝     ╚═╝
+Stratospheric High-Altitude Radiation Observation of Organismic Mycology
+"""
 
 
 def _parse_bandwidth_limit(text, minimum_kbit_s):
@@ -56,7 +64,7 @@ class GroundStationApp(App):
     """
 
     TITLE = "SHROOM Ground Station"
-    SUB_TITLE = "BEXUS"
+    SUB_TITLE = "BEXUS 39"
 
 
     CSS = """
@@ -65,7 +73,7 @@ class GroundStationApp(App):
     }
 
     #brand {
-        height: 1;
+        height: 8;
         content-align: center middle;
         text-style: bold;
         color: cyan;
