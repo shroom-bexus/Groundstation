@@ -257,9 +257,24 @@ class GroundStationLogger:
             elif telemetry_type == "THERMAL_CONFIG":
                 self._write_csv(
                     "thermal_config.csv",
-                    ("received_utc", "sequence", "time_ms", "mode", "hysteresis_K", "bang_bang_power_percent"),
-                    (received_utc, sequence, telemetry["time_ms"], telemetry["mode"],
-                     telemetry["hysteresis_k"], telemetry["bang_bang_power_percent"])
+                    (
+                        "received_utc",
+                        "sequence",
+                        "time_ms",
+                        "mode",
+                        "hysteresis_K",
+                        "bang_bang_power_percent",
+                        "fusion_mode",
+                    ),
+                    (
+                        received_utc,
+                        sequence,
+                        telemetry["time_ms"],
+                        telemetry["mode"],
+                        telemetry["hysteresis_k"],
+                        telemetry["bang_bang_power_percent"],
+                        telemetry.get("fusion_mode") or "",
+                    )
                 )
 
             elif telemetry_type == "PID":
