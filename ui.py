@@ -544,8 +544,10 @@ class GroundStationApp(App):
         # --------------------------------------------------------------------
 
         if telemetry_type == "THERMAL_CONFIG":
+            fusion = telemetry.get("fusion_mode") or "---"
             self.query_one("#thermal_config", Static).update(
                 f"Regulator     {telemetry['mode']}\n"
+                f"Fusion        {fusion}\n"
                 f"Hysteresis    ±{telemetry['hysteresis_k']:.6g} °C\n"
                 f"BB power      {telemetry['bang_bang_power_percent']:.6g} %"
             )
@@ -945,6 +947,10 @@ class GroundStationApp(App):
                 "  thermal <on/off/pid/bangbang>"
             )
 
+            self._write_log(
+                "  fusion <mean/median/min/max>"
+            )
+
             self._write_log("  hysteresis <°C> (half-width, 0 < °C <= 10)")
             self._write_log("  bbpower <percent> (0..100)")
 
@@ -1129,6 +1135,38 @@ class GroundStationApp(App):
         if command_lower in ("thermal pid", "thermal bangbang"):
             mode = "PID" if command_lower == "thermal pid" else "BANG_BANG"
             self.command_queue.put(f"CMD,SET_THERMAL_MODE,{mode}")
+            return
+
+        fusion_parts = command_lower.split()
+        if (
+            fusion_parts[:1] == ["fusion"] or
+            fusion_parts[:2] == ["thermal", "fusion"]
+        ):
+            value_index = 1 if fusion_parts[:1] == ["fusion"] else 2
+            if len(fusion_parts) != value_index + 1:
+                self._write_log(
+                    "[GS] Usage: fusion <mean|median|min|max>"
+                )
+                return
+
+            fusion_modes = {
+                "mean": "MEAN",
+                "median": "MEDIAN",
+                "min": "MINIMUM",
+                "minimum": "MINIMUM",
+                "max": "MAXIMUM",
+                "maximum": "MAXIMUM",
+            }
+            fusion_mode = fusion_modes.get(fusion_parts[value_index])
+            if fusion_mode is None:
+                self._write_log(
+                    "[GS] Fusion must be mean, median, min, or max."
+                )
+                return
+
+            self.command_queue.put(
+                f"CMD,SET_THERMAL_FUSION,{fusion_mode}"
+            )
             return
 
         if command_lower.split()[0] in ("hysteresis", "bbpower"):
