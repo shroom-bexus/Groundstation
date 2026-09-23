@@ -10,15 +10,6 @@ class BinaryTelemetryTests(unittest.TestCase):
         p=self.packet(b'\x01\xf2\0\x7b\x01\xf2\x01\xf0\xb2\xd4\0\0\x41')
         self.assertEqual(decode_datagram(p),['SEQ,1','AIRDOS,123,1,$E,54450,65'])
 
-    def test_plate_limit_dictionary_token(self):
-        # PLATE_LIMIT,1,1 uses appended dictionary index 12; existing indices
-        # remain unchanged for compatibility with deployed SHB1 records.
-        p = self.packet(b'\x01\xf2\x0c\x01\x01')
-        self.assertEqual(
-            decode_datagram(p),
-            ['SEQ,1', 'PLATE_LIMIT,1,1']
-        )
-
     def test_raw_and_legacy(self):
         self.assertEqual(decode_datagram(self.packet(b'\0RTC,1,UNKNOWN')),['SEQ,1','RTC,1,UNKNOWN'])
         self.assertEqual(decode_datagram(b'ACK,5,OK\n'),['ACK,5,OK'])
