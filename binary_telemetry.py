@@ -2,8 +2,7 @@
 import struct
 
 DICTIONARY = (b"AIRDOS", b"$E", b"$START", b"$STOP", b"$ENV", b"HEALTH",
-              b"PADS", b"THERMAL", b"MAX31865", b"RTC", b"OK", b"FAULT",
-              b"PLATE_LIMIT")
+              b"PADS", b"THERMAL", b"MAX31865", b"RTC", b"OK", b"FAULT")
 MAX_PACKET = 1200
 MAX_LINE = 1151
 
