@@ -277,6 +277,33 @@ class GroundStationLogger:
                     )
                 )
 
+            elif telemetry_type == "PLATE_LIMIT":
+                self._write_csv(
+                    "plate_limit.csv",
+                    (
+                        "received_utc",
+                        "sequence",
+                        "time_ms",
+                        "enabled",
+                        "limit_K",
+                        "temperature_K",
+                        "tripped",
+                        "sensor",
+                        "heater",
+                    ),
+                    (
+                        received_utc,
+                        sequence,
+                        telemetry["time_ms"],
+                        int(telemetry["enabled"]),
+                        telemetry["limit_k"],
+                        telemetry["temperature_k"],
+                        int(telemetry["tripped"]),
+                        telemetry["sensor"],
+                        telemetry["heater"],
+                    )
+                )
+
             elif telemetry_type == "PID":
                 self._write_csv(
                     "pid.csv",

@@ -168,6 +168,8 @@ class GroundStationApp(App):
         self.health = {}
         self.downlink_status = None
         self.max31865_temperatures = {}
+        self.plate_limit = None
+        self.plate_limit_received_at = None
 
 
     # ========================================================================
@@ -222,6 +224,17 @@ class GroundStationApp(App):
                 )
 
                 yield Static("Regulator     ---", id="thermal_config")
+
+                yield Static("PLATE SAFETY", classes="section_title")
+
+                yield Static(
+                    "State         WAITING\n"
+                    "Limit         --- °C\n"
+                    "Plate temp.   --- °C\n"
+                    "Sensor        ---\n"
+                    "Protected     ---",
+                    id="plate_limit"
+                )
 
                 yield Static("PID", classes="section_title")
 
@@ -548,6 +561,16 @@ class GroundStationApp(App):
 
 
         # --------------------------------------------------------------------
+        # Heating-plate temperature limiter
+        # --------------------------------------------------------------------
+
+        if telemetry_type == "PLATE_LIMIT":
+            self.plate_limit = telemetry
+            self.plate_limit_received_at = time.monotonic()
+            self._update_plate_limit_panel()
+            return
+
+        # --------------------------------------------------------------------
         # PID gains
         # --------------------------------------------------------------------
 
@@ -726,8 +749,58 @@ class GroundStationApp(App):
         ]
         self.query_one('#max31865_temperatures', Static).update('\n'.join(lines))
 
+    def _update_plate_limit_panel(self):
+        if self.plate_limit is None:
+            self.query_one("#plate_limit", Static).update(
+                "State         WAITING\n"
+                "Limit         --- °C\n"
+                "Plate temp.   --- °C\n"
+                "Sensor        ---\n"
+                "Protected     ---"
+            )
+            return
+
+        data = self.plate_limit
+        age = (
+            time.monotonic() - self.plate_limit_received_at
+            if self.plate_limit_received_at is not None
+            else float("inf")
+        )
+        stale = not self.connected or age >= 10.0
+
+        if not data["enabled"]:
+            state = "OFF"
+        elif data["tripped"]:
+            state = "TRIPPED"
+        else:
+            state = "ARMED"
+
+        if stale:
+            state = f"STALE (last {state})"
+
+        temperature_k = data["temperature_k"]
+        temperature_text = (
+            f"{celsius(temperature_k):.2f} °C"
+            if math.isfinite(temperature_k)
+            else "INVALID"
+        )
+        protected = (
+            "ALL HEATERS"
+            if data["heater"] == 0
+            else f"Heater {data['heater']}"
+        )
+
+        self.query_one("#plate_limit", Static).update(
+            f"State         {state}\n"
+            f"Limit         {celsius(data['limit_k']):.2f} °C\n"
+            f"Plate temp.   {temperature_text}\n"
+            f"Sensor        TEMP {data['sensor']}\n"
+            f"Protected     {protected}"
+        )
+
     def _update_live_validity(self):
         self._update_temperature_panel()
+        self._update_plate_limit_panel()
         self._update_health_panel()
 
     def _update_health_panel(self):
@@ -956,6 +1029,10 @@ class GroundStationApp(App):
             )
 
             self._write_log(
+                "  platelimit <on/off/0..100 °C>"
+            )
+
+            self._write_log(
                 "  fusion <mean/median/min/max>"
             )
 
@@ -1133,6 +1210,47 @@ class GroundStationApp(App):
                 f"CMD,SET_TARGET,{target_k:.2f}"
             )
 
+            return
+
+
+        # --------------------------------------------------------------------
+        # Heating-plate temperature limiter
+        # --------------------------------------------------------------------
+
+        if command_lower.startswith("platelimit"):
+            parts = command.split()
+
+            if len(parts) != 2:
+                self._write_log(
+                    "[GS] Usage: platelimit <on|off|0..100 °C>"
+                )
+                return
+
+            argument = parts[1].lower()
+            if argument == "on":
+                self.command_queue.put("CMD,PLATE_LIMIT_ON")
+                return
+            if argument == "off":
+                self.command_queue.put("CMD,PLATE_LIMIT_OFF")
+                return
+
+            try:
+                limit_c = float(parts[1])
+                if (
+                    not math.isfinite(limit_c) or
+                    limit_c < 0.0 or
+                    limit_c > 100.0
+                ):
+                    raise ValueError
+            except ValueError:
+                self._write_log(
+                    "[GS] Plate limit must be on, off, or 0...100 °C."
+                )
+                return
+
+            self.command_queue.put(
+                f"CMD,SET_PLATE_LIMIT,{limit_c + 273.15:.2f}"
+            )
             return
 
 

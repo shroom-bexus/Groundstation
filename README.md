@@ -73,6 +73,27 @@ Validation: host-side regression tests exercise the real controller source with
 simulated EEPROM, sensor and heater interfaces. Hardware timing, PWM and thermal
 response still require a Teensy bench test before use.
 
+## Heating-plate temperature limit
+
+The terminal exposes the independent heating-plate safety limiter:
+
+```text
+platelimit 50
+platelimit on
+platelimit off
+```
+
+`platelimit <value>` accepts 0..100 °C. The flight computer stores the limit
+and enabled state persistently. The thermal panel shows whether the limiter is
+OFF, ARMED, TRIPPED, or STALE, plus its configured limit, live plate
+temperature, configured TEMP sensor, and protected heater channel. A protected
+heater value of `ALL HEATERS` corresponds to flight configuration value 0.
+
+The flight computer sends
+`PLATE_LIMIT,time_ms,enabled,limit_K,temperature_K,tripped,sensor,heater`.
+The GS records these reports in `plate_limit.csv`. Temperature values on the
+wire and in CSV remain Kelvin; the terminal converts them to °C.
+
 ## Temperature units and storage health
 
 The terminal GS and browser dashboard show temperatures and target values in
