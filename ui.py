@@ -1260,7 +1260,7 @@ class GroundStationApp(App):
 
         if command_lower in ("thermal pid", "thermal bangbang"):
             mode = "PID" if command_lower == "thermal pid" else "BANG_BANG"
-            self.command_queue.put(f"CMD,SET_THERMAL_MODE,{mode}")
+            self.command_queue.put(f"CMD,SET_MODE,{mode}")
             return
 
         fusion_parts = command_lower.split()
@@ -1291,7 +1291,7 @@ class GroundStationApp(App):
                 return
 
             self.command_queue.put(
-                f"CMD,SET_THERMAL_FUSION,{fusion_mode}"
+                f"CMD,SET_FUSION,{fusion_mode}"
             )
             return
 

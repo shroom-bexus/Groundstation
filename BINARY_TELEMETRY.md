@@ -4,7 +4,7 @@ SHB1 replaces regular CSV telemetry on UDP, including AIRDOS and housekeeping.
 Commands and immediate ACK/NACK/WARN/session replies remain text. SD logging and
 secondary-to-primary UART forwarding are unchanged. Update Groundstation first:
 it accepts both legacy text telemetry and SHB1. An old GS cannot decode SHB1.
-Deploy matching `feature/binary-telemetry` branches in both repositories.
+Use matching `main` versions in both repositories after the integration merge.
 
 The codec is lossless for the existing CSV text: no floating-point rounding,
 assumed AIRDOS sensor bit widths, or discarded unknown fields. Canonical unsigned
@@ -82,10 +82,21 @@ Replay duplicates each source event across nine sensor IDs at the same recorded
 time, runs production queue/pacing code with mocked UDP and a 1 ms service tick,
 and adds one PADS message/second at a configured 120 kbit/s. The replay checker
 now also verifies at least 50 ms between regular packets and a rolling 200 ms
-wire-rate ceiling. Because the pacing algorithm changed after the original
-baseline run, the previous packet-count/delay figures are no longer treated as
-current validation results. Re-run the script below before flight and record the
-new figures together with the hardware replay.
+wire-rate ceiling.
+
+Updated replay on 6 October 2026, using the original recording and the current
+production scheduler:
+
+- 23,769 source records roundtrip exactly, plus four boundary cases.
+- All 213,921 nine-sensor AIRDOS records are delivered unchanged.
+- 39,472 regular packets; 9,023,078 estimated wire bytes.
+- Peak queue occupancy: 2,493 records; zero drops, zero suppression, zero remaining.
+- Maximum simulated delivery delay: 3,666 ms.
+- 50 ms minimum regular-packet spacing and the rolling 200 ms rate ceiling pass.
+
+The replay adds one PADS message per second; it is not a complete simulation of
+all flight housekeeping, UART/SD timing or radio behavior. Hardware replay
+remains required before flight.
 
 Reproduce with Groundstation's `tools/verify_binary_replay.py`:
 
