@@ -106,6 +106,16 @@ python tools/verify_binary_replay.py ../Flight_Software /path/to/radiation.jsonl
 
 Additional host checks cover ring wraparound, 32-bit clock rollover, send failure,
 numeric boundaries, raw fallback and malformed packets. Run `test/host/run.sh`
-for the existing primary/secondary link tests. A real Teensy build and hardware
-replay remain required before flight; the local firmware build dependency download
-was blocked by the environment's network approval mechanism.
+for primary/secondary link, thermal/EEPROM and queue regression tests.
+
+Both Teensy 4.1 firmware targets built successfully on 6 October 2026 with
+PlatformIO 6.2.0, Teensy platform 6.0.0, Arduino Teensy 1.62 and GCC 15.2.1.
+The inactive Ethernet implementation is excluded from the Secondary build.
+
+| Target | RAM1 variables | RAM1 code + padding | RAM1 available for locals | RAM2 available for heap |
+| --- | ---: | ---: | ---: | ---: |
+| Primary | 268,548 B | 196,608 B | 59,132 B | 511,840 B |
+| Secondary | 86,400 B | 98,304 B | 339,584 B | 511,872 B |
+
+These are static linker margins, not a measured runtime stack high-water mark.
+Hardware replay, PWM and thermal-response validation remain required before flight.
