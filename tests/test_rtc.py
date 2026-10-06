@@ -37,10 +37,13 @@ class RTCTests(unittest.TestCase):
         with patch('ui.time.monotonic', return_value=100):
             app._handle_telemetry(parse_telemetry('RTC,1,1,2026-09-21T12:34:56Z'))
         self.assertIn('2026-09-21T12:34:56Z', widget.update.call_args.args[0])
-        with patch('ui.time.monotonic', return_value=116):
+        with patch('ui.time.monotonic', return_value=160):
+            app._update_rtc_panel()
+            self.assertNotIn('STALE', widget.update.call_args.args[0])
+        with patch('ui.time.monotonic', return_value=176):
             app._update_rtc_panel()
         self.assertIn('STALE', widget.update.call_args.args[0])
-        with patch('ui.time.monotonic', return_value=117):
+        with patch('ui.time.monotonic', return_value=177):
             app._handle_telemetry(parse_telemetry('RTC,2,0,'))
             self.assertIn('INVALID', widget.update.call_args.args[0])
             self.assertNotIn('STALE', widget.update.call_args.args[0])

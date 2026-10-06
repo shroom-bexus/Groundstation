@@ -112,6 +112,10 @@ class GroundStationLogger:
             "data": text,
         }
 
+        if isinstance(payload, bytes) and payload.startswith(b"SHB"):
+            record["data"] = payload.hex()
+            record["encoding"] = "hex"
+
         with self._lock:
             self._write_json_line(self._traffic_file, record)
 
@@ -253,9 +257,51 @@ class GroundStationLogger:
             elif telemetry_type == "THERMAL_CONFIG":
                 self._write_csv(
                     "thermal_config.csv",
-                    ("received_utc", "sequence", "time_ms", "mode", "hysteresis_K", "bang_bang_power_percent"),
-                    (received_utc, sequence, telemetry["time_ms"], telemetry["mode"],
-                     telemetry["hysteresis_k"], telemetry["bang_bang_power_percent"])
+                    (
+                        "received_utc",
+                        "sequence",
+                        "time_ms",
+                        "mode",
+                        "hysteresis_K",
+                        "bang_bang_power_percent",
+                        "fusion_mode",
+                    ),
+                    (
+                        received_utc,
+                        sequence,
+                        telemetry["time_ms"],
+                        telemetry["mode"],
+                        telemetry["hysteresis_k"],
+                        telemetry["bang_bang_power_percent"],
+                        telemetry.get("fusion_mode") or "",
+                    )
+                )
+
+            elif telemetry_type == "PLATE_LIMIT":
+                self._write_csv(
+                    "plate_limit.csv",
+                    (
+                        "received_utc",
+                        "sequence",
+                        "time_ms",
+                        "enabled",
+                        "limit_K",
+                        "temperature_K",
+                        "tripped",
+                        "sensor",
+                        "heater",
+                    ),
+                    (
+                        received_utc,
+                        sequence,
+                        telemetry["time_ms"],
+                        int(telemetry["enabled"]),
+                        telemetry["limit_k"],
+                        telemetry["temperature_k"],
+                        int(telemetry["tripped"]),
+                        telemetry["sensor"],
+                        telemetry["heater"],
+                    )
                 )
 
             elif telemetry_type == "PID":

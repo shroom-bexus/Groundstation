@@ -215,7 +215,7 @@ function updateState(state) {
   const rtc = latest.rtc;
   const rtcAge = state.rtc_age_s;
   element("rtc-time").textContent = !rtc ? "waiting for data" :
-    `${rtc.valid ? rtc.timestamp_utc : "INVALID / not synchronized"} (last sample, received ${Math.floor(rtcAge)} s ago)${!state.connected || rtcAge > 15 ? " — STALE" : ""}`;
+    `${rtc.valid ? rtc.timestamp_utc : "INVALID / not synchronized"} (last sample, received ${Math.floor(rtcAge)} s ago)${!state.connected || rtcAge > 75 ? " — STALE" : ""}`;
   const thermal = latest.thermal || {};
   const regulator = latest.thermal_config?.mode || "Control";
   const pads = latest.pads || {};

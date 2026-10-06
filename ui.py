@@ -34,7 +34,7 @@ from freshness import Freshness
 from rich.text import Text
 
 
-SHROOM_LOGO = r"""
+SHROOM_BANNER = """
         ███████╗██╗  ██╗██████╗  ██████╗  ██████╗ ███╗   ███╗
         ██╔════╝██║  ██║██╔══██╗██╔═══██╗██╔═══██╗████╗ ████║
         ███████╗███████║██████╔╝██║   ██║██║   ██║██╔████╔██║
@@ -64,7 +64,7 @@ class GroundStationApp(App):
     """
 
     TITLE = "SHROOM Ground Station"
-    SUB_TITLE = "BEXUS"
+    SUB_TITLE = "BEXUS 39"
 
 
     CSS = """
@@ -72,17 +72,39 @@ class GroundStationApp(App):
         layout: vertical;
     }
 
-    #logo {
+    #brand {
         height: 8;
         content-align: center middle;
         text-style: bold;
+        color: cyan;
+    }
+
+    #status_bar {
+        height: 3;
+    }
+
+    #connection, #rtc {
+        height: 3;
+        padding: 0 1;
+        border: round grey;
+        content-align: left middle;
     }
 
     #connection {
-        height: 3;
-        padding: 0 2;
-        border: solid white;
+        width: 3fr;
         text-style: bold;
+    }
+
+    #rtc {
+        width: 2fr;
+    }
+
+    #connection.online {
+        border: round green;
+    }
+
+    #connection.offline {
+        border: round red;
     }
 
     #data_area {
@@ -92,25 +114,41 @@ class GroundStationApp(App):
     .panel {
         width: 1fr;
         overflow-y: auto;
-        padding: 1 2;
-        border: solid white;
+        padding: 0 1;
+        border: round grey;
     }
 
     .panel_title {
+        height: 1;
         text-style: bold;
+        color: cyan;
         margin-bottom: 1;
     }
 
+    .section_title {
+        height: 1;
+        margin-top: 1;
+        text-style: bold;
+        color: grey;
+    }
+
+    #console_title {
+        height: 1;
+        padding: 0 1;
+        text-style: bold;
+        color: cyan;
+    }
+
     #log {
-        height: 16;
-        border: solid white;
-        padding: 1 2;
+        height: 10;
+        border: round grey;
+        padding: 0 1;
     }
 
     #command {
-        height: 5;
-        border: solid white;
-        padding: 1 2;
+        height: 3;
+        border: round cyan;
+        padding: 0 1;
     }
     """
 
@@ -130,6 +168,8 @@ class GroundStationApp(App):
         self.health = {}
         self.downlink_status = None
         self.max31865_temperatures = {}
+        self.plate_limit = None
+        self.plate_limit_received_at = None
 
 
     # ========================================================================
@@ -139,18 +179,15 @@ class GroundStationApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
 
-        yield Static(
-            SHROOM_LOGO,
-            id="logo"
-        )
+        yield Static(SHROOM_BANNER, id="brand")
 
-        yield Static(
-            self._connection_text(),
-            id="connection"
-        )
-
-
-        yield Static("Primary RTC (UTC): waiting for data", id="rtc")
+        with Horizontal(id="status_bar"):
+            yield Static(
+                self._connection_text(),
+                id="connection",
+                classes="offline"
+            )
+            yield Static("RTC UTC  |  waiting for data", id="rtc")
 
         with Horizontal(id="data_area"):
 
@@ -160,48 +197,61 @@ class GroundStationApp(App):
 
             with Vertical(classes="panel"):
                 yield Static(
-                    "THERMAL",
+                    "THERMAL CONTROL",
                     classes="panel_title"
                 )
 
+                yield Static("CONTROL", classes="section_title")
+
                 yield Static(
-                    "Control: ---",
+                    "Enabled       ---",
                     id="thermal_enabled"
                 )
 
                 yield Static(
-                    "Temperature: --- °C",
+                    "Temperature   --- °C",
                     id="thermal_temperature"
                 )
 
                 yield Static(
-                    "Target: --- °C",
+                    "Target        --- °C",
                     id="thermal_target"
                 )
 
                 yield Static(
-                    "Controller output: --- %",
+                    "Output        --- %",
                     id="thermal_output"
                 )
 
-                yield Static("Regulator: ---", id="thermal_config")
+                yield Static("Regulator     ---", id="thermal_config")
+
+                yield Static("PLATE SAFETY", classes="section_title")
 
                 yield Static(
-                    "Kp: ---\n"
-                    "Ki: ---\n"
-                    "Kd: ---",
+                    "State         WAITING\n"
+                    "Limit         --- °C\n"
+                    "Plate temp.   --- °C\n"
+                    "Sensor        ---\n"
+                    "Protected     ---",
+                    id="plate_limit"
+                )
+
+                yield Static("PID", classes="section_title")
+
+                yield Static(
+                    "Kp  ---\n"
+                    "Ki  ---\n"
+                    "Kd  ---",
                     id="pid_gains"
                 )
 
-                yield Static(
-                    "",
-                )
+                yield Static("HEATERS", classes="section_title")
 
                 yield Static(
-                    "Heater 1: --- %\n"
-                    "Heater 2: --- %\n"
-                    "Heater 3: --- %\n"
-                    "Heater 4: --- %",
+                    "Heater 1      --- %\n"
+                    "Heater 2      --- %\n"
+                    "Heater 3      --- %\n"
+                    "Heater 4      --- %",
                     id="heater_outputs"
                 )
 
@@ -216,37 +266,40 @@ class GroundStationApp(App):
                     classes="panel_title"
                 )
 
+                yield Static("AMBIENT", classes="section_title")
+
                 yield Static(
-                    "PADS temperature: --- °C",
+                    "PADS temp.     --- °C",
                     id="pads_temperature"
                 )
 
                 yield Static(
-                    "Pressure: --- Pa",
+                    "Pressure       --- Pa",
                     id="pads_pressure"
                 )
 
                 yield Static(
-                    "HIDS temperature: --- °C",
+                    "HIDS temp.     --- °C",
                     id="hids_temperature"
                 )
 
                 yield Static(
-                    "Relative humidity: --- %",
+                    "Humidity       --- %",
                     id="hids_humidity"
                 )
 
+                yield Static("PT1000 / MAX31865", classes="section_title")
+
                 yield Static(
-                    "MAX31865:\n"
-                    "TEMP 1: ---\n"
-                    "TEMP 2: ---\n"
-                    "TEMP 3: ---\n"
-                    "TEMP 4: ---\n"
-                    "TEMP 5: ---\n"
-                    "TEMP 6: ---\n"
-                    "TEMP 7: ---\n"
-                    "TEMP 8: ---\n"
-                    "TEMP 9: ---",
+                    "TEMP 1  ---\n"
+                    "TEMP 2  ---\n"
+                    "TEMP 3  ---\n"
+                    "TEMP 4  ---\n"
+                    "TEMP 5  ---\n"
+                    "TEMP 6  ---\n"
+                    "TEMP 7  ---\n"
+                    "TEMP 8  ---\n"
+                    "TEMP 9  ---",
                     id="max31865_temperatures"
                 )
 
@@ -257,7 +310,7 @@ class GroundStationApp(App):
 
             with Vertical(classes="panel"):
                 yield Static(
-                    "HEALTH",
+                    "SYSTEM HEALTH",
                     classes="panel_title"
                 )
 
@@ -279,18 +332,19 @@ class GroundStationApp(App):
         # Console
         # --------------------------------------------------------------------
 
+        yield Static("EVENT LOG", id="console_title")
+
         yield RichLog(
             id="log",
             wrap=True
         )
-
 
         # --------------------------------------------------------------------
         # Command input
         # --------------------------------------------------------------------
 
         yield Input(
-            placeholder="Command: help",
+            placeholder="Enter command  •  HELP shows available commands",
             id="command"
         )
 
@@ -320,6 +374,7 @@ class GroundStationApp(App):
         )
 
         ethernet_thread.start()
+        self.query_one("#command", Input).focus()
         self.set_interval(1.0, self._update_live_validity)
         self.set_interval(1.0, self._update_rtc_panel)
 
@@ -394,9 +449,9 @@ class GroundStationApp(App):
             text = self.rtc["timestamp_utc"] if self.rtc["valid"] else "INVALID / not synchronized"
             age = time.monotonic() - self.rtc_received_at
             text += f" (last sample, received {age:.0f} s ago)"
-            if not self.connected or age > 15:
+            if not self.connected or age > 75:
                 text += " — STALE"
-        self.query_one("#rtc", Static).update(f"Primary RTC (UTC): {text}")
+        self.query_one("#rtc", Static).update(f"RTC UTC  |  {text}")
 
     def _set_rates(self, upload_kbit_s, download_kbit_s):
         self.upload_rate_kbit_s = upload_kbit_s
@@ -413,11 +468,9 @@ class GroundStationApp(App):
         state = "ONLINE" if self.connected else "OFFLINE"
         uplink_limit, downlink_limit = self.bandwidth.get_limits()
         return (
-            f"Connection: {state}    "
-            f"Upload: {self.upload_rate_kbit_s:.1f} / "
-            f"{self._format_limit(uplink_limit)} kbit/s    "
-            f"Download: {self.download_rate_kbit_s:.1f} / "
-            f"{self._format_limit(downlink_limit)} kbit/s"
+            f"NET {state}  |  "
+            f"UL {self.upload_rate_kbit_s:.1f}/{self._format_limit(uplink_limit)}  |  "
+            f"DL {self.download_rate_kbit_s:.1f}/{self._format_limit(downlink_limit)} kbit/s"
         )
 
 
@@ -428,6 +481,8 @@ class GroundStationApp(App):
             Static
         )
         connection.update(self._connection_text())
+        connection.remove_class("online", "offline")
+        connection.add_class("online" if self.connected else "offline")
 
 
     # ========================================================================
@@ -473,7 +528,7 @@ class GroundStationApp(App):
                 "#thermal_enabled",
                 Static
             ).update(
-                f"Control: {enabled_state}"
+                f"Enabled       {enabled_state}"
             )
 
 
@@ -481,7 +536,7 @@ class GroundStationApp(App):
                 "#thermal_temperature",
                 Static
             ).update(
-                f"Temperature: {self.freshness.label('THERMAL', self.connected)}"
+                f"Temperature   {self.freshness.label('THERMAL', self.connected)}"
             )
 
 
@@ -489,7 +544,7 @@ class GroundStationApp(App):
                 "#thermal_target",
                 Static
             ).update(
-                f"Target: "
+                f"Target        "
                 f"{celsius(telemetry['target_k']):.2f} °C"
             )
 
@@ -498,7 +553,7 @@ class GroundStationApp(App):
                 "#thermal_output",
                 Static
             ).update(
-                f"Controller output: "
+                f"Output        "
                 f"{telemetry['output_percent']:.1f} %"
             )
 
@@ -506,14 +561,26 @@ class GroundStationApp(App):
 
 
         # --------------------------------------------------------------------
+        # Heating-plate temperature limiter
+        # --------------------------------------------------------------------
+
+        if telemetry_type == "PLATE_LIMIT":
+            self.plate_limit = telemetry
+            self.plate_limit_received_at = time.monotonic()
+            self._update_plate_limit_panel()
+            return
+
+        # --------------------------------------------------------------------
         # PID gains
         # --------------------------------------------------------------------
 
         if telemetry_type == "THERMAL_CONFIG":
+            fusion = telemetry.get("fusion_mode") or "---"
             self.query_one("#thermal_config", Static).update(
-                f"Regulator: {telemetry['mode']}\n"
-                f"Hysteresis: ±{telemetry['hysteresis_k']:.6g} °C\n"
-                f"BB ON power: {telemetry['bang_bang_power_percent']:.6g} %"
+                f"Regulator     {telemetry['mode']}\n"
+                f"Fusion        {fusion}\n"
+                f"Hysteresis    ±{telemetry['hysteresis_k']:.6g} °C\n"
+                f"BB power      {telemetry['bang_bang_power_percent']:.6g} %"
             )
             return
 
@@ -523,9 +590,9 @@ class GroundStationApp(App):
                 "#pid_gains",
                 Static
             ).update(
-                f"Kp: {telemetry['kp']:.6g}\n"
-                f"Ki: {telemetry['ki']:.6g}\n"
-                f"Kd: {telemetry['kd']:.6g}"
+                f"Kp  {telemetry['kp']:.6g}\n"
+                f"Ki  {telemetry['ki']:.6g}\n"
+                f"Kd  {telemetry['kd']:.6g}"
             )
 
             return
@@ -541,10 +608,10 @@ class GroundStationApp(App):
                 "#heater_outputs",
                 Static
             ).update(
-                f"Heater 1: {telemetry['heater_1']:.1f} %\n"
-                f"Heater 2: {telemetry['heater_2']:.1f} %\n"
-                f"Heater 3: {telemetry['heater_3']:.1f} %\n"
-                f"Heater 4: {telemetry['heater_4']:.1f} %"
+                f"Heater 1      {telemetry['heater_1']:.1f} %\n"
+                f"Heater 2      {telemetry['heater_2']:.1f} %\n"
+                f"Heater 3      {telemetry['heater_3']:.1f} %\n"
+                f"Heater 4      {telemetry['heater_4']:.1f} %"
             )
 
             return
@@ -560,7 +627,7 @@ class GroundStationApp(App):
                 "#pads_temperature",
                 Static
             ).update(
-                f"PADS temperature: {self.freshness.label('PADS', self.connected)}"
+                f"PADS temp.     {self.freshness.label('PADS', self.connected)}"
             )
 
 
@@ -568,7 +635,7 @@ class GroundStationApp(App):
                 "#pads_pressure",
                 Static
             ).update(
-                f"Pressure: "
+                f"Pressure       "
                 f"{telemetry['pressure_pa']:.2f} Pa"
             )
 
@@ -585,7 +652,7 @@ class GroundStationApp(App):
                 "#hids_temperature",
                 Static
             ).update(
-                f"HIDS temperature: {self.freshness.label('HIDS', self.connected)}"
+                f"HIDS temp.     {self.freshness.label('HIDS', self.connected)}"
             )
 
 
@@ -593,7 +660,7 @@ class GroundStationApp(App):
                 "#hids_humidity",
                 Static
             ).update(
-                f"Relative humidity: "
+                f"Humidity       "
                 f"{telemetry['humidity_percent']:.2f} %"
             )
 
@@ -670,20 +737,70 @@ class GroundStationApp(App):
 
     def _update_temperature_panel(self):
         for key, widget, label in (
-            ('THERMAL', '#thermal_temperature', 'Temperature'),
-            ('PADS', '#pads_temperature', 'PADS temperature'),
-            ('HIDS', '#hids_temperature', 'HIDS temperature'),
+            ('THERMAL', '#thermal_temperature', 'Temperature  '),
+            ('PADS', '#pads_temperature', 'PADS temp.    '),
+            ('HIDS', '#hids_temperature', 'HIDS temp.    '),
         ):
             self.query_one(widget, Static).update(
-                f"{label}: {self.freshness.label(key, self.connected)}")
-        lines = ['MAX31865:'] + [
-            f"TEMP {sensor}: {self.freshness.label(f'MAX31865_{sensor}', self.connected)}"
+                f"{label} {self.freshness.label(key, self.connected)}")
+        lines = [
+            f"TEMP {sensor:<2} {self.freshness.label(f'MAX31865_{sensor}', self.connected)}"
             for sensor in range(1, 10)
         ]
         self.query_one('#max31865_temperatures', Static).update('\n'.join(lines))
 
+    def _update_plate_limit_panel(self):
+        if self.plate_limit is None:
+            self.query_one("#plate_limit", Static).update(
+                "State         WAITING\n"
+                "Limit         --- °C\n"
+                "Plate temp.   --- °C\n"
+                "Sensor        ---\n"
+                "Protected     ---"
+            )
+            return
+
+        data = self.plate_limit
+        age = (
+            time.monotonic() - self.plate_limit_received_at
+            if self.plate_limit_received_at is not None
+            else float("inf")
+        )
+        stale = not self.connected or age >= 10.0
+
+        if not data["enabled"]:
+            state = "OFF"
+        elif data["tripped"]:
+            state = "TRIPPED"
+        else:
+            state = "ARMED"
+
+        if stale:
+            state = f"STALE (last {state})"
+
+        temperature_k = data["temperature_k"]
+        temperature_text = (
+            f"{celsius(temperature_k):.2f} °C"
+            if math.isfinite(temperature_k)
+            else "INVALID"
+        )
+        protected = (
+            "ALL HEATERS"
+            if data["heater"] == 0
+            else f"Heater {data['heater']}"
+        )
+
+        self.query_one("#plate_limit", Static).update(
+            f"State         {state}\n"
+            f"Limit         {celsius(data['limit_k']):.2f} °C\n"
+            f"Plate temp.   {temperature_text}\n"
+            f"Sensor        TEMP {data['sensor']}\n"
+            f"Protected     {protected}"
+        )
+
     def _update_live_validity(self):
         self._update_temperature_panel()
+        self._update_plate_limit_panel()
         self._update_health_panel()
 
     def _update_health_panel(self):
@@ -691,7 +808,12 @@ class GroundStationApp(App):
         Update the permanent health overview.
         """
 
-        lines = [f"Secondary Teensy link: {self.freshness.secondary_state(self.connected)}"]
+        lines = [
+            "LINK",
+            f"Secondary Teensy  {self.freshness.secondary_state(self.connected)}",
+            "",
+            "STORAGE",
+        ]
 
 
         # --------------------------------------------------------------------
@@ -713,6 +835,8 @@ class GroundStationApp(App):
         # --------------------------------------------------------------------
         # MAX31865 temperature sensors
         # --------------------------------------------------------------------
+
+        lines.extend(["", "TEMPERATURE SENSORS"])
 
         max_keys = sorted(
             key for key in self.health
@@ -740,6 +864,8 @@ class GroundStationApp(App):
         # --------------------------------------------------------------------
         # WSEN-PADS
         # --------------------------------------------------------------------
+
+        lines.extend(["", "OTHER SENSORS"])
 
         pads = self.health.get("PADS")
 
@@ -792,6 +918,8 @@ class GroundStationApp(App):
         # AIRDOS
         # --------------------------------------------------------------------
 
+        lines.extend(["", "AIRDOS"])
+
         airdos_keys = sorted(
             (
                 key for key in self.health
@@ -835,10 +963,10 @@ class GroundStationApp(App):
             else:
                 limit_text = f"{downlink['limit_kbit_s']:.1f} kbit/s"
 
-            lines.append("")
+            lines.extend(["", "DOWNLINK"])
             lines.append(
-                f"FC downlink: {limit_text}  "
-                f"AIRDOS: {downlink['airdos_selected_count']}/9 "
+                f"Limit: {limit_text}  "
+                f"selected {downlink['airdos_selected_count']}/9 "
                 f"(level {downlink['airdos_level']})"
             )
             lines.append(
@@ -898,6 +1026,14 @@ class GroundStationApp(App):
 
             self._write_log(
                 "  thermal <on/off/pid/bangbang>"
+            )
+
+            self._write_log(
+                "  platelimit <on/off/0..100 °C>"
+            )
+
+            self._write_log(
+                "  fusion <mean/median/min/max>"
             )
 
             self._write_log("  hysteresis <°C> (half-width, 0 < °C <= 10)")
@@ -1078,12 +1214,85 @@ class GroundStationApp(App):
 
 
         # --------------------------------------------------------------------
+        # Heating-plate temperature limiter
+        # --------------------------------------------------------------------
+
+        if command_lower.startswith("platelimit"):
+            parts = command.split()
+
+            if len(parts) != 2:
+                self._write_log(
+                    "[GS] Usage: platelimit <on|off|0..100 °C>"
+                )
+                return
+
+            argument = parts[1].lower()
+            if argument == "on":
+                self.command_queue.put("CMD,PLATE_LIMIT_ON")
+                return
+            if argument == "off":
+                self.command_queue.put("CMD,PLATE_LIMIT_OFF")
+                return
+
+            try:
+                limit_c = float(parts[1])
+                if (
+                    not math.isfinite(limit_c) or
+                    limit_c < 0.0 or
+                    limit_c > 100.0
+                ):
+                    raise ValueError
+            except ValueError:
+                self._write_log(
+                    "[GS] Plate limit must be on, off, or 0...100 °C."
+                )
+                return
+
+            self.command_queue.put(
+                f"CMD,SET_PLATE_LIMIT,{limit_c + 273.15:.2f}"
+            )
+            return
+
+
+        # --------------------------------------------------------------------
         # Thermal controller
         # --------------------------------------------------------------------
 
         if command_lower in ("thermal pid", "thermal bangbang"):
             mode = "PID" if command_lower == "thermal pid" else "BANG_BANG"
-            self.command_queue.put(f"CMD,SET_THERMAL_MODE,{mode}")
+            self.command_queue.put(f"CMD,SET_MODE,{mode}")
+            return
+
+        fusion_parts = command_lower.split()
+        if (
+            fusion_parts[:1] == ["fusion"] or
+            fusion_parts[:2] == ["thermal", "fusion"]
+        ):
+            value_index = 1 if fusion_parts[:1] == ["fusion"] else 2
+            if len(fusion_parts) != value_index + 1:
+                self._write_log(
+                    "[GS] Usage: fusion <mean|median|min|max>"
+                )
+                return
+
+            fusion_modes = {
+                "mean": "MEAN",
+                "median": "MEDIAN",
+                "min": "MINIMUM",
+                "minimum": "MINIMUM",
+                "max": "MAXIMUM",
+                "maximum": "MAXIMUM",
+            }
+            fusion_mode = fusion_modes.get(fusion_parts[value_index])
+            if fusion_mode is None:
+                self._write_log(
+                    "[GS] Fusion must be mean, median, min, or max."
+                )
+                return
+
+            self.command_queue.put(
+                f"CMD,SET_FUSION,{fusion_mode}"
+            )
             return
 
         if command_lower.split()[0] in ("hysteresis", "bbpower"):

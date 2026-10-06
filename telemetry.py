@@ -14,6 +14,7 @@ Parsing of telemetry messages received from the SHROOM flight computer.
 
 
 from datetime import datetime
+import math
 
 # ============================================================================
 # Telemetry parser
@@ -204,6 +205,47 @@ def parse_telemetry(line):
             return None
 
     # ------------------------------------------------------------------------
+    # Heating-plate temperature limiter
+    # ------------------------------------------------------------------------
+    #
+    # Format:
+    # PLATE_LIMIT,time_ms,enabled,limit_K,temperature_K,tripped,sensor,heater
+    # heater=0 means all heater channels.
+    #
+
+    if parts[0] == "PLATE_LIMIT":
+        if len(parts) != 8 or parts[2] not in ("0", "1") or parts[5] not in ("0", "1"):
+            return None
+        try:
+            time_ms = int(parts[1])
+            limit_k = float(parts[3])
+            temperature_k = float(parts[4])
+            sensor = int(parts[6])
+            heater = int(parts[7])
+
+            if not 0 <= time_ms <= 0xFFFFFFFF:
+                return None
+            if not math.isfinite(limit_k) or not 273.15 <= limit_k <= 373.15:
+                return None
+            if math.isinf(temperature_k):
+                return None
+            if not 1 <= sensor <= 9 or not 0 <= heater <= 4:
+                return None
+
+            return {
+                "type": "PLATE_LIMIT",
+                "time_ms": time_ms,
+                "enabled": parts[2] == "1",
+                "limit_k": limit_k,
+                "temperature_k": temperature_k,
+                "tripped": parts[5] == "1",
+                "sensor": sensor,
+                "heater": heater,
+            }
+        except ValueError:
+            return None
+
+    # ------------------------------------------------------------------------
     # PID gains
     # ------------------------------------------------------------------------
     #
@@ -212,15 +254,26 @@ def parse_telemetry(line):
     #
 
     if parts[0] == "THERMAL_CONFIG":
-        if len(parts) != 5 or parts[2] not in ("PID", "BANG_BANG"):
+        # Current format:
+        # THERMAL_CONFIG,time_ms,mode,hysteresis_K,bb_power_percent,fusion
+        # The five-field legacy format remains accepted for older firmware.
+        if len(parts) not in (5, 6) or parts[2] not in ("PID", "BANG_BANG"):
             return None
         try:
             hysteresis, power = float(parts[3]), float(parts[4])
             if not (0 < hysteresis <= 10 and 0 <= power <= 100):
                 return None
+
+            fusion_mode = None
+            if len(parts) == 6:
+                if parts[5] not in ("MEAN", "MEDIAN", "MINIMUM", "MAXIMUM"):
+                    return None
+                fusion_mode = parts[5]
+
             return {"type": "THERMAL_CONFIG", "time_ms": int(parts[1]),
                     "mode": parts[2], "hysteresis_k": hysteresis,
-                    "bang_bang_power_percent": power}
+                    "bang_bang_power_percent": power,
+                    "fusion_mode": fusion_mode}
         except ValueError:
             return None
 

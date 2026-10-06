@@ -52,7 +52,11 @@ class FreshnessTests(unittest.TestCase):
             tracker.observe(ok)
             self.assertEqual(tracker.secondary_state(True), 'OK')
             self.assertIn('STALE', tracker.secondary_state(False))
-        with patch('freshness.time.monotonic', return_value=115):
+        # The GS receives system health once per minute. It must retain a
+        # fresh status through that period and expire it after 75 seconds.
+        with patch('freshness.time.monotonic', return_value=160):
+            self.assertEqual(tracker.secondary_state(True), 'OK')
+        with patch('freshness.time.monotonic', return_value=176):
             self.assertIn('STALE', tracker.secondary_state(True))
 
     def test_terminal_timer_and_dashboard_snapshot(self):
@@ -76,5 +80,5 @@ class FreshnessTests(unittest.TestCase):
             # An explicit fault must be both permanent and logged.
             fault = parse_telemetry('HEALTH,15000,SECONDARY,FAULT,0')
             app._handle_telemetry(fault)
-            self.assertIn('Secondary Teensy link: FAULT', widgets['#health_status'].update.call_args.args[0])
+            self.assertIn('Secondary Teensy  FAULT', widgets['#health_status'].update.call_args.args[0])
             app._write_log.assert_called_once()
