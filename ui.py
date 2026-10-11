@@ -288,6 +288,8 @@ class GroundStationApp(App):
                     id="hids_humidity"
                 )
 
+                yield Static("Box temperature (TEMP 8)  ---", id="box_temperature")
+
                 yield Static("PT1000 / MAX31865", classes="section_title")
 
                 yield Static(
@@ -743,6 +745,8 @@ class GroundStationApp(App):
         ):
             self.query_one(widget, Static).update(
                 f"{label} {self.freshness.label(key, self.connected)}")
+        self.query_one('#box_temperature', Static).update(
+            f"Box temperature (TEMP 8)  {self.freshness.label('MAX31865_8', self.connected)}")
         lines = [
             f"TEMP {sensor:<2} {self.freshness.label(f'MAX31865_{sensor}', self.connected)}"
             for sensor in range(1, 10)
@@ -1029,6 +1033,7 @@ class GroundStationApp(App):
             )
 
             self._write_log(
+                "  platesensor <3/4>\n"
                 "  platelimit <on/off/0..100 °C>"
             )
 
@@ -1216,6 +1221,14 @@ class GroundStationApp(App):
         # --------------------------------------------------------------------
         # Heating-plate temperature limiter
         # --------------------------------------------------------------------
+
+        if command_lower.split()[:1] == ["platesensor"]:
+            parts = command_lower.split()
+            if len(parts) != 2 or parts[1] not in ("3", "4"):
+                self._write_log("[GS] Usage: platesensor <3|4>")
+                return
+            self.command_queue.put(f"CMD,SET_PLATE_SENSOR,{parts[1]}")
+            return
 
         if command_lower.startswith("platelimit"):
             parts = command.split()

@@ -79,7 +79,7 @@ response still require a Teensy bench test before use.
 The selected control sensors are TEMP_1, TEMP_2, TEMP_5, TEMP_6, TEMP_7 and
 TEMP_9 in Flight Software's `include/config.h`. All six must be valid by default;
 a missing selected sensor turns heating off, including manual heating. The
-plate sensor TEMP_3 is separate. A per-sensor 40 °C cutoff is checked before
+selected plate sensor (TEMP_3 or TEMP_4) is separate. A per-sensor 40 °C cutoff is checked before
 fusion, so MEAN or MEDIAN cannot hide an overheated control sensor.
 
 Use `fusion mean`, `fusion median`, `fusion min` or `fusion max` in the GS.
@@ -177,3 +177,120 @@ This version accepts both SHB1 binary telemetry and legacy text telemetry. Insta
 it before flashing the matching binary Flight Software. The UI and decoded logs
 keep their existing formats; raw SHB1 traffic is logged losslessly as hex.
 See [protocol and replay results](BINARY_TELEMETRY.md).
+
+### Heater plate and box temperature
+
+The groundstation commands `platesensor 3` and `platesensor 4` select the
+PT1000 used by the heater-plate safety limiter (wire command:
+`CMD,SET_PLATE_SENSOR,3` or `CMD,SET_PLATE_SENSOR,4`). The selection persists
+across resets; existing settings migrate with TEMP 3 as the default.
+The PLATE SAFETY panel confirms the selected sensor. When the limiter is
+enabled, an invalid selected sensor inhibits the protected heater outputs.
+Sensor 8 is additionally displayed as Box temperature, including freshness
+and validity indicators. These changes do not change the fusion sensor list.
+
+## Complete command reference
+
+### Groundstation terminal
+
+Enter these commands in the GS command field, without a `CMD,` prefix. Use a
+period as the decimal separator. Temperatures entered here are **°C**; heater
+numbers refer to outputs, while `platesensor` numbers refer to PT1000 sensors.
+
+| Command | Meaning / accepted values | Example |
+| --- | --- | --- |
+| `help` | Show built-in command help; works offline. | `help` |
+| `target <temperature>` | Set control target; firmware requires −273.15 < °C < 40 with the current configuration. | `target 25` |
+| `thermal on` | Enable the selected automatic regulator. | `thermal on` |
+| `thermal off` | Disable automatic regulation. Required before manual heater commands. | `thermal off` |
+| `thermal pid` | Select PID; does not itself enable regulation. | `thermal pid` |
+| `thermal bangbang` | Select bang-bang; does not itself enable regulation. | `thermal bangbang` |
+| `fusion <mode>` | `mean`, `median`, `min` / `minimum`, or `max` / `maximum`. Alias: `thermal fusion <mode>`. | `fusion max` |
+| `hysteresis <value>` | Bang-bang half-width in °C: 0 < value ≤ 10. | `hysteresis 0.5` |
+| `bbpower <percent>` | Bang-bang ON output: 0..100%. | `bbpower 30` |
+| `pid <Kp> <Ki> <Kd>` | Set all three gains, each 0..1000; does not select PID mode. | `pid 8 0.01 0.5` |
+| `kp <value>` | Set Kp only, 0..1000. | `kp 8` |
+| `ki <value>` | Set Ki only, 0..1000. | `ki 0.01` |
+| `kd <value>` | Set Kd only, 0..1000. | `kd 0.5` |
+| `platesensor <sensor>` | Select TEMP 3 or TEMP 4 for the plate safety limiter. | `platesensor 4` |
+| `platelimit <temperature>` | Set the plate limit, 0..100 °C; does not enable the limiter. | `platelimit 50` |
+| `platelimit on` | Enable the independent plate safety limiter. | `platelimit on` |
+| `platelimit off` | Disable the independent plate safety limiter. | `platelimit off` |
+| `heater <1-4> <percent>` | Set one heater output, 0..100%; automatic regulation must be OFF. Safety gates still apply. | `heater 1 20` |
+| `heater all <percent>` | Set all heater outputs, 0..100%; same safety conditions. | `heater all 0` |
+| `rates` | Display configured upload/download limits; works offline. | `rates` |
+| `rates <upload> <download>` | Set both limits in kbit/s; works offline. | `rates 1 120` |
+| `upload <limit>` | Set GS uplink limit: 1..10000 kbit/s, or `unlimited` / `0`. | `upload 1` |
+| `download <limit>` | Set flight downlink limit: 2..10000 kbit/s, or `unlimited` / `0`. | `download 120` |
+
+All commands except help and bandwidth configuration require a GS connection.
+Thermal settings (including plate selection/limit), gains and manual output
+settings persist on the Teensy. Bandwidth settings persist on the GS; its
+configured downlink limit is sent on connection and after limit changes.
+The flight downlink limit also persists on the Teensy. Protocol support for
+`unlimited` does not remove the balloon link's operational bandwidth limits.
+
+TEMP 8 is additionally shown as **Box temperature**, with validity/freshness
+indicators. The PLATE SAFETY panel shows the selected plate sensor. Selecting a
+plate sensor does not change the regulation/fusion sensor membership.
+There is no terminal `ping`, `status`, or raw-command passthrough: the link sends
+heartbeats automatically and system status is reported by periodic telemetry.
+
+### Flight UDP protocol (complete handler list)
+
+The GS adds a command ID and newline before transmission:
+`CMD,<id>,<name>[,<arguments>]`. IDs are unsigned 16-bit values. For example,
+`CMD,42,SET_PLATE_SENSOR,4`. Responses use `ACK`, `NACK`, or `WARN`, followed by
+the command ID, command name and optional details. Legacy aliases may reply
+using their long canonical name. Prefer compact names for the uplink budget.
+
+| Command name | Arguments | Meaning |
+| --- | --- | --- |
+| `PING` | None | Heartbeat acknowledgement. |
+| `SET_TARGET` | Temperature in K | Set target; current firmware requires 0 < K < 313.15. |
+| `THERMAL_ON` | None | Enable automatic regulation. |
+| `THERMAL_OFF` | None | Disable automatic regulation. |
+| `SET_MODE` / `SET_THERMAL_MODE` | `PID` or `BANG_BANG` | Select regulator. |
+| `SET_FUSION` / `SET_THERMAL_FUSION` | `MEAN`, `MEDIAN`, `MINIMUM`, `MAXIMUM` | Select fusion function. |
+| `SET_HYSTERESIS` | Half-width in K, >0..10 | Set bang-bang hysteresis. |
+| `SET_BB_POWER` | Percent, 0..100 | Set bang-bang ON output. |
+| `SET_PID` | `Kp,Ki,Kd`, each 0..1000 | Set all PID gains. |
+| `SET_KP` | Gain, 0..1000 | Set Kp. |
+| `SET_KI` | Gain, 0..1000 | Set Ki. |
+| `SET_KD` | Gain, 0..1000 | Set Kd. |
+| `SET_PLATE_SENSOR` | `3` or `4` | Select plate temperature sensor. |
+| `SET_PLATE_LIMIT` | Temperature in K, 273.15..373.15 | Set plate safety threshold. |
+| `PLATE_LIMIT_ON` | None | Enable plate limiter. |
+| `PLATE_LIMIT_OFF` | None | Disable plate limiter. |
+| `SET_HEATER` | `1..4,percent` or `ALL,percent` | Manual output, 0..100%; rejected with WARN while automatic control is enabled. |
+| `SET_DL_LIMIT` / `SET_DOWNLINK_LIMIT` | kbit/s, 2..10000 or `0` | Set downlink limit; zero means unlimited. |
+
+The separate session handshake is `HELLO,<session>` (1..8 characters), answered
+with `ACK_SESSION,<session>`. The GS handles session negotiation and retries.
+`STATUS` and `HELP` are not flight UDP commands in this version. Absolute
+protocol temperatures and CSV temperature columns use Kelvin; hysteresis is a
+temperature difference, so its numeric value is identical in K and °C.
+
+### USB log-download commands
+
+These are USB serial commands, not GS terminal or UDP commands. Download mode
+stops normal logging; reset the Teensy to resume normal operation afterward.
+
+| Serial command | Meaning |
+| --- | --- |
+| `DOWNLOAD,ENTER` | Enter download mode before listing or reading files. |
+| `DOWNLOAD,LIST,<storage>` | List files on `INTERNAL` or `BACKUP`. |
+| `DOWNLOAD,GET,<storage>,<filename>` | Transfer a file from the selected storage. |
+
+The Flight Software repository includes a helper that handles the USB protocol:
+
+```bash
+python tools/download_logs.py /dev/ttyACM0 --storage BACKUP --list
+python tools/download_logs.py /dev/ttyACM0 --storage BACKUP --output downloaded_logs
+python tools/download_logs.py /dev/ttyACM0 --storage INTERNAL --file airdos.csv
+```
+
+Its complete options are `--storage INTERNAL|BACKUP` (default BACKUP), `--list`,
+`--file <name>` (repeatable), `--output <directory>` (default `downloaded_logs`),
+`--overwrite`, and `-h` / `--help`; the serial port is required. Run it from the
+Flight Software repository and connect USB to the Teensy whose logs are needed.
