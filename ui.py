@@ -168,6 +168,7 @@ class GroundStationApp(App):
         self.rtc_received_at = None
         self.health = {}
         self.cpu_temperatures = {}
+        self.cpu_temperatures_invalidated = set()
         self.downlink_status = None
         self.max31865_temperatures = {}
         self.plate_limit = None
@@ -447,6 +448,7 @@ class GroundStationApp(App):
         if not connected:
             self._erase_pending = None
             self.freshness.invalidate()
+            self.cpu_temperatures_invalidated.update(self.cpu_temperatures)
             self.upload_rate_kbit_s = 0.0
             self.download_rate_kbit_s = 0.0
 
@@ -528,6 +530,7 @@ class GroundStationApp(App):
             self.cpu_temperatures[telemetry["source"]] = (
                 telemetry["temperature_c"], time.monotonic()
             )
+            self.cpu_temperatures_invalidated.discard(telemetry["source"])
             self._update_cpu_temperatures_panel()
             return
 
@@ -832,7 +835,9 @@ class GroundStationApp(App):
                 status = f"{temperature_c:.2f} °C"
                 # CPU readings share the 60 s health cadence, not the 10 s
                 # PT1000 freshness timeout.
-                if not self.connected or age_s >= 75.0:
+                if (not self.connected or
+                        source in self.cpu_temperatures_invalidated or
+                        age_s >= 75.0):
                     status += f" — STALE ({age_s:.0f} s old)"
             lines.append(f"{label:<10} {status}")
         self.query_one("#cpu_temperatures", Static).update("\n".join(lines))
