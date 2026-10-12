@@ -157,6 +157,7 @@ class GroundStationApp(App):
         super().__init__()
 
         self.command_queue = queue.Queue()
+        self._erase_pending = None  # (card type, expiration monotonic time)
         self.connected = False
         self.bandwidth = BandwidthSettings()
         self.upload_rate_kbit_s = 0.0
@@ -436,6 +437,7 @@ class GroundStationApp(App):
         self.connected = connected
 
         if not connected:
+            self._erase_pending = None
             self.freshness.invalidate()
             self.upload_rate_kbit_s = 0.0
             self.download_rate_kbit_s = 0.0
@@ -1075,6 +1077,8 @@ class GroundStationApp(App):
             self._write_log(
                 "  heater <1-4|all> <0-100>"
             )
+            self._write_log("  erase backup  (both XTSD cards; confirmation required)")
+            self._write_log("  erase sd      (both internal SDs; confirmation required)")
 
             self._write_log(
                 "  help"
@@ -1184,6 +1188,36 @@ class GroundStationApp(App):
 
             return
 
+
+        # --------------------------------------------------------------------
+        # Explicit two-step confirmation of permanent log deletion.
+        # --------------------------------------------------------------------
+        if command_parts[0].lower() == "erase":
+            if len(command_parts) < 2 or command_parts[1].lower() not in ("sd", "backup"):
+                self._write_log("[GS] Usage: erase <sd|backup> [confirm]")
+                return
+            kind = command_parts[1].lower()
+            if len(command_parts) == 2:
+                self._erase_pending = (kind, time.monotonic() + 30)
+                self._write_log(
+                    f"[GS] DANGER: permanently delete SHROOM logs on BOTH {kind.upper()} cards. "
+                    "Save and verify your data first."
+                )
+                self._write_log(f"[GS] Type 'erase {kind} confirm' within 30 seconds.")
+                return
+            if len(command_parts) != 3 or command_parts[2].lower() != "confirm":
+                self._write_log("[GS] Usage: erase <sd|backup> [confirm]")
+                return
+            if (self._erase_pending is None or
+                self._erase_pending[0] != kind or
+                time.monotonic() > self._erase_pending[1]):
+                self._erase_pending = None
+                self._write_log(f"[GS] Confirmation missing or expired. Start with 'erase {kind}'.")
+                return
+            self._erase_pending = None
+            self.command_queue.put("CMD,ERASE_B,YES" if kind == "backup" else "CMD,ERASE_I,YES")
+            self._write_log("[GS] Erase requested. Await Primary reply AND Secondary result.")
+            return
 
         # --------------------------------------------------------------------
         # Set thermal target
