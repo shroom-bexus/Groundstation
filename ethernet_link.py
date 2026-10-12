@@ -12,7 +12,7 @@ from telemetry import parse_telemetry
 from binary_telemetry import decode_datagram
 
 
-TEENSY_IP = "172.16.18.131"
+TEENSY_IP = "172.16.18.141"
 TEENSY_PORT = 5000
 NETWORK_INTERFACE = network_interface()
 
