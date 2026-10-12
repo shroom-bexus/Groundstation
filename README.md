@@ -189,6 +189,20 @@ enabled, an invalid selected sensor inhibits the protected heater outputs.
 Sensor 8 is additionally displayed as Box temperature, including freshness
 and validity indicators. These changes do not change the fusion sensor list.
 
+## Delete SD and backup recordings from the Groundstation
+
+With **both Teensys updated**, type `erase backup` to select both XTSD
+backup cards or `erase sd` for both internal SD cards. The GS displays a
+warning; execute with `erase backup confirm` or `erase sd confirm` within
+30 seconds. You must be connected. The first ACK/WARN reports the Primary
+operation and SECONDARY_PENDING. The later ERASE_RESULT reports the
+Secondary's OK, FAILED, or TIMEOUT; a timeout is not confirmation of success.
+
+Only SHROOM CSV log files are deleted; the filesystem and unrelated files
+remain intact. Recorders reopen with fresh CSV headers. Do this ONLY during
+ground servicing, not during flight or when measurements matter. Download and
+verify all needed data first.
+
 ## Complete command reference
 
 ### Groundstation terminal
@@ -200,6 +214,8 @@ numbers refer to outputs, while `platesensor` numbers refer to PT1000 sensors.
 | Command | Meaning / accepted values | Example |
 | --- | --- | --- |
 | `help` | Show built-in command help; works offline. | `help` |
+| `erase backup` / `erase backup confirm` | Remove SHROOM logs from both XTSD backup cards (confirmation required). | `erase backup` |
+| `erase sd` / `erase sd confirm` | Remove SHROOM logs from both internal SD cards (confirmation required). | `erase sd` |
 | `target <temperature>` | Set control target; firmware requires −273.15 < °C < 40 with the current configuration. | `target 25` |
 | `thermal on` | Enable the selected automatic regulator. | `thermal on` |
 | `thermal off` | Disable automatic regulation. Required before manual heater commands. | `thermal off` |
