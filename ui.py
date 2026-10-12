@@ -166,6 +166,7 @@ class GroundStationApp(App):
         self.rtc = None
         self.rtc_received_at = None
         self.health = {}
+        self.cpu_temperatures = {}
         self.downlink_status = None
         self.max31865_temperatures = {}
         self.plate_limit = None
@@ -314,6 +315,13 @@ class GroundStationApp(App):
                 yield Static(
                     "SYSTEM HEALTH",
                     classes="panel_title"
+                )
+
+                yield Static(
+                    "CPU DIE TEMPERATURES\n"
+                    "Primary    WAITING\n"
+                    "Secondary  WAITING",
+                    id="cpu_temperatures"
                 )
 
                 yield Static(
@@ -512,6 +520,13 @@ class GroundStationApp(App):
             self.rtc = telemetry
             self.rtc_received_at = time.monotonic()
             self._update_rtc_panel()
+            return
+
+        if telemetry_type == "CPU_TEMP":
+            self.cpu_temperatures[telemetry["source"]] = (
+                telemetry["temperature_c"], time.monotonic()
+            )
+            self._update_cpu_temperatures_panel()
             return
 
 
@@ -802,7 +817,26 @@ class GroundStationApp(App):
             f"Protected     {protected}"
         )
 
+    def _update_cpu_temperatures_panel(self):
+        """Display both die readings, without confusing them with box temperature."""
+        lines = ["CPU DIE TEMPERATURES"]
+        for source, label in (("PRIMARY", "Primary"), ("SECONDARY", "Secondary")):
+            sample = self.cpu_temperatures.get(source)
+            if sample is None:
+                status = "WAITING"
+            else:
+                temperature_c, received_at = sample
+                age_s = max(0.0, time.monotonic() - received_at)
+                status = f"{temperature_c:.2f} °C"
+                # CPU readings share the 60 s health cadence, not the 10 s
+                # PT1000 freshness timeout.
+                if not self.connected or age_s >= 75.0:
+                    status += f" — STALE ({age_s:.0f} s old)"
+            lines.append(f"{label:<10} {status}")
+        self.query_one("#cpu_temperatures", Static).update("\n".join(lines))
+
     def _update_live_validity(self):
+        self._update_cpu_temperatures_panel()
         self._update_temperature_panel()
         self._update_plate_limit_panel()
         self._update_health_panel()
