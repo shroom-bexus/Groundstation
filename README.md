@@ -26,6 +26,21 @@ are additionally written to `commands.csv`.
 The `data/` directory is ignored by Git and can therefore be copied or archived
 without affecting the repository.
 
+## Teensy CPU temperature monitoring
+
+With both Flight Teensys running the matching temperature branch, the
+**SYSTEM HEALTH** panel shows the **Primary** and **Secondary** CPU die
+temperatures in °C. These readings are not the box temperature.
+The Primary downlinks them at the existing 60-second housekeeping interval.
+Readings older than 75 seconds (or from a disconnected GS link) display
+`STALE` rather than a current value. An unreported Secondary shows `WAITING`.
+
+All received CPU samples are saved under each GS session's data directory
+in `cpu_temperature.csv` (with source and reception UTC), and also in
+`telemetry.jsonl`. Each Teensy independently saves local samples every 5
+seconds to `cpu_temperature.csv` on both onboard SD devices. The Primary also
+mirrors the Secondary readings arriving over its UART link.
+
 
 ## Selectable thermal regulator
 
