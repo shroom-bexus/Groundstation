@@ -110,6 +110,30 @@ def parse_telemetry(line):
 
 
     # ------------------------------------------------------------------------
+    # CPU die temperature, forwarded by Primary for both Teensy boards
+    # CPU_TEMP,time_ms,PRIMARY|SECONDARY,temperature_C
+    # ------------------------------------------------------------------------
+
+    if parts[0] == "CPU_TEMP":
+        if len(parts) != 4 or parts[2] not in ("PRIMARY", "SECONDARY"):
+            return None
+        try:
+            time_ms = int(parts[1])
+            temperature_c = float(parts[3])
+            if not 0 <= time_ms <= 0xFFFFFFFF:
+                return None
+            if not math.isfinite(temperature_c) or not -55.0 <= temperature_c <= 150.0:
+                return None
+            return {
+                "type": "CPU_TEMP",
+                "time_ms": time_ms,
+                "source": parts[2],
+                "temperature_c": temperature_c,
+            }
+        except ValueError:
+            return None
+
+    # ------------------------------------------------------------------------
     # MAX31865 / PT1000
     # ------------------------------------------------------------------------
     #
