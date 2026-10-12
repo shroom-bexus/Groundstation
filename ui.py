@@ -567,7 +567,7 @@ class GroundStationApp(App):
                 Static
             ).update(
                 f"Target        "
-                f"{celsius(telemetry['target_k']):.2f} °C"
+                f"{celsius(telemetry['target_k']):.1f} °C"
             )
 
 
@@ -804,7 +804,7 @@ class GroundStationApp(App):
 
         temperature_k = data["temperature_k"]
         temperature_text = (
-            f"{celsius(temperature_k):.2f} °C"
+            f"{celsius(temperature_k):.1f} °C"
             if math.isfinite(temperature_k)
             else "INVALID"
         )
@@ -816,7 +816,7 @@ class GroundStationApp(App):
 
         self.query_one("#plate_limit", Static).update(
             f"State         {state}\n"
-            f"Limit         {celsius(data['limit_k']):.2f} °C\n"
+            f"Limit         {celsius(data['limit_k']):.1f} °C\n"
             f"Plate temp.   {temperature_text}\n"
             f"Sensor        TEMP {data['sensor']}\n"
             f"Protected     {protected}"
@@ -832,7 +832,7 @@ class GroundStationApp(App):
             else:
                 temperature_c, received_at = sample
                 age_s = max(0.0, time.monotonic() - received_at)
-                status = f"{temperature_c:.2f} °C"
+                status = f"{temperature_c:.1f} °C"
                 # CPU readings share the 60 s health cadence, not the 10 s
                 # PT1000 freshness timeout.
                 if (not self.connected or
