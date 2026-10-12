@@ -399,6 +399,20 @@ def _handle_udp(
             pending = None
             continue
 
+        if lines[0].startswith("ERASE_RESULT,"):
+            parts = lines[0].split(",")
+            if (len(parts) == 5 and parts[1].isdigit() and
+                    parts[2] == "SECONDARY" and
+                    parts[3] in ("INTERNAL", "BACKUP") and
+                    parts[4] in ("OK", "FAILED", "TIMEOUT")):
+                on_log(
+                    f"Storage erase result (command {parts[1]}): "
+                    f"{parts[2]} {parts[3]} {parts[4]}"
+                )
+            else:
+                on_log(f"Invalid erase result: {lines[0]}")
+            continue
+
         if not lines[0].startswith("SEQ,"):
             on_log(f"Unknown UDP datagram: {lines[0]}")
             continue
