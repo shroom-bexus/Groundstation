@@ -56,7 +56,7 @@ class Freshness:
     def label(self, key, connected):
         item = self.temperature(key, connected)
         value = item['temperature_k']
-        text = '---' if value is None else f'{value - 273.15:.3f} °C'
+        text = '---' if value is None else f'{value - 273.15:.1f} °C'
         if item['state'] != 'OK':
             text += f" — {item['state']}"
             if item['age_s'] is not None:

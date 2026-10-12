@@ -75,8 +75,42 @@ class DisplayStorageTests(unittest.TestCase):
         app.query_one = lambda key, kind: widgets.setdefault(key, Mock())
         app._write_log = Mock()
         app._handle_telemetry(parse_telemetry("THERMAL,1,1,298.15,273.15,0"))
-        widgets["#thermal_temperature"].update.assert_called_with("Temperature   0.000 °C")
-        widgets["#thermal_target"].update.assert_called_with("Target        25.00 °C")
+        widgets["#thermal_temperature"].update.assert_called_with("Temperature   0.0 °C")
+        widgets["#thermal_target"].update.assert_called_with("Target        25.0 °C")
+        # Temperature formatting is presentation-only and uses one decimal.
+        app._handle_telemetry(parse_telemetry("PADS,1,293.21,101325"))
+        self.assertEqual(
+            widgets["#pads_temperature"].update.call_args.args[0],
+            "PADS temp.     20.1 °C",
+        )
+        app._handle_telemetry(parse_telemetry("HIDS,1,294.31,42"))
+        self.assertEqual(
+            widgets["#hids_temperature"].update.call_args.args[0],
+            "HIDS temp.     21.2 °C",
+        )
+        app._handle_telemetry(parse_telemetry("MAX31865,1,8,294.25"))
+        self.assertIn(
+            "TEMP 8  21.1 °C",
+            widgets["#max31865_temperatures"].update.call_args.args[0],
+        )
+        self.assertEqual(
+            widgets["#box_temperature"].update.call_args.args[0],
+            "Box temperature (TEMP 8)  21.1 °C",
+        )
+        app._handle_telemetry(parse_telemetry("PLATE_LIMIT,1,1,323.15,320.45,0,3,0"))
+        self.assertIn(
+            "Limit         50.0 °C",
+            widgets["#plate_limit"].update.call_args.args[0],
+        )
+        self.assertIn(
+            "Plate temp.   47.3 °C",
+            widgets["#plate_limit"].update.call_args.args[0],
+        )
+        app._handle_telemetry(parse_telemetry("CPU_TEMP,1,PRIMARY,42.75"))
+        self.assertIn(
+            "Primary    42.8 °C",
+            widgets["#cpu_temperatures"].update.call_args.args[0],
+        )
         fault = parse_telemetry("HEALTH,2,SD_BACKUP,FAULT,1")
         app._handle_telemetry(fault)
         app._handle_telemetry(fault)

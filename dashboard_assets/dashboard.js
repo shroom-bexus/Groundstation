@@ -195,7 +195,7 @@ function updateLogs(logs) {
   });
 }
 
-function temperatureText(item, digits = 2) {
+function temperatureText(item, digits = 1) {
   if (!item) return "— WAITING";
   const value = item.temperature_k === null ? "—" : valueOrDash(celsius(item.temperature_k), digits);
   return item.state === "OK" ? value : `${value} [${item.state}]`;
@@ -229,7 +229,7 @@ function updateState(state) {
   element("last-update").textContent = new Date().toLocaleTimeString([], { hour12: false });
 
   element("thermal-temperature").textContent = temperatureText(temperatures.THERMAL);
-  element("thermal-target").textContent = `Target ${valueOrDash(celsius(thermal.target_k), 2)} °C`;
+  element("thermal-target").textContent = `Target ${valueOrDash(celsius(thermal.target_k), 1)} °C`;
   element("pressure-value").textContent = valueOrDash(Number(pads.pressure_pa) / 100, 1);
   element("pads-temperature").textContent = `PADS ${temperatureText(temperatures.PADS)} °C`;
   element("humidity-value").textContent = valueOrDash(hids.humidity_percent, 1);
